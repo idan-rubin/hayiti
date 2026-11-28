@@ -146,8 +146,13 @@ const heading = () => {
 // Room under the heading for the day's summary, three ordinary stops and the day's actions, in rem as the stylesheet
 // sets them. Measuring the day's own stops instead would move the dates under the finger that turns them.
 const firstStopsRoom = 16;
+// Must match the short window's media query in journal.css, where the whole panel scrolls in place of the list.
+const shortWindow = matchMedia('(max-height: 540px)');
 const sheet = createSheet($('panel'), $('sheetHandle'), map.getContainer().parentElement!, heading, () =>
-  heading() + firstStopsRoom * parseFloat(getComputedStyle(document.documentElement).fontSize), () => fitRoute());
+  heading() + firstStopsRoom * parseFloat(getComputedStyle(document.documentElement).fontSize), from => {
+  fitRoute();
+  if (from === 'peek' && shortWindow.matches) keepInView();
+});
 const mapSection = map.getContainer().parentElement!,
   mapControls = document.querySelector<HTMLElement>('.map-controls')!;
 const sheetWidth = matchMedia(sheetLayout);
@@ -434,9 +439,7 @@ function render() {
   if ((trip?.id ?? '') !== shownTripId) {
     shownTripId = trip?.id ?? '';
     document.querySelector<HTMLElement>('.listbody')!.scrollTop = 0;
-    sheet.scroll(() => {
-      $('panel').scrollTop = 0;
-    });
+    $('panel').scrollTop = 0;
   }
 }
 const stopCount = (count: number) => count === 1 ? t('תחנה אחת') : count + t(' תחנות');
@@ -449,9 +452,6 @@ const { setDates, showWholeTrip } = createDateReel($('dayReel'), $('tripDate'), 
   draw();
   // Not startList(): scrolling the panel would move the reel under the finger.
   document.querySelector<HTMLElement>('.listbody')!.scrollTop = 0;
-  if (sheet.lowered) sheet.scroll(() => {
-    $('panel').scrollTop = 0;
-  });
 });
 function distanceLabel(meters: number) {
   return meters < 1000 ? Math.max(1, Math.round(meters / 10) * 10) + t(' מ׳') : dateFormats[language].distance.format(meters / 1000) + t(' ק״מ');
@@ -482,9 +482,7 @@ function showDailyStats(stats: ReturnType<typeof walkingStats>) {
 function startList() {
   const list = document.querySelector<HTMLElement>('.listbody')!;
   if (getComputedStyle(list).overflowY !== 'visible') list.scrollTop = 0;
-  else sheet.scroll(() => {
-    $('panel').scrollTop = Math.max(0, $('dayReel').closest<HTMLElement>('.daybar')!.offsetTop - $('sheetHandle').offsetHeight);
-  });
+  else $('panel').scrollTop = Math.max(0, $('dayReel').closest<HTMLElement>('.daybar')!.offsetTop - $('sheetHandle').offsetHeight);
 }
 function openMapDay(date: string) {
   overviewTripId = '';
@@ -821,30 +819,20 @@ function showRow(id: string) {
   if (box.top < top || box.height > bottom - top) scroller.scrollTop += box.top - top;
   else if (box.bottom > bottom) scroller.scrollTop += box.bottom - bottom;
 }
-function showSelected() {
-  const id = selected,
-    list = rows.get(id)?.closest<HTMLElement>('.listbody');
-  if (!list) return;
-  if (getComputedStyle(list).overflowY !== 'visible') showRow(id);
-  else sheet.scroll(() => {
-    if (selected === id) showRow(id);
-  });
-}
 function keepInView() {
   const focused = document.activeElement;
-  if (focused instanceof HTMLElement && $('panel').contains(focused) && focused.getClientRects().length) {
+  if (focused instanceof HTMLElement && focused !== $('sheetHandle') && $('panel').contains(focused) && focused.getClientRects().length) {
     focused.scrollIntoView({ block: 'nearest' });
   } else {
-    showSelected();
+    showRow(selected);
   }
 }
-// Must match the short window's media query in journal.css, where the whole panel scrolls in place of the list.
-matchMedia('(max-height: 540px)').addEventListener('change', keepInView);
+shortWindow.addEventListener('change', keepInView);
 function reveal(id: string, target: 'row' | 'pin') {
   selected = id;
   for (const [key, row] of rows) row.classList.toggle('activeStop', key === id);
   if (target === 'row') {
-    showSelected();
+    showRow(selected);
     return;
   }
   // On a phone a full sheet covers the map, which is fitted again as the sheet lowers.

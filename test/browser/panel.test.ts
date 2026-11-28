@@ -639,7 +639,7 @@ const raiseSheet = async (page: Page) => {
   await sheetSettled(page);
 };
 
-await test('lowered in a short, narrow window the sheet shows the trip and its days within reach, and raising it returns to the same stops', async () => {
+await test('lowered in a short, narrow window the sheet shows the trip and its days within reach, and rises from its top', async () => {
   const browser = await chromium.launch();
   try {
     for (const [width, height] of [[411, 400], [320, 480]]) {
@@ -664,14 +664,11 @@ await test('lowered in a short, narrow window the sheet shows the trip and its d
         await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
         await page.mouse.down();
         await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 - 100, { steps: 6 });
-        assert.equal(await panel.evaluate(element => element.scrollTop), scrolled, `${width}×${height} ${lang}: a drag upward shows the stops where they were`);
+        assert.ok(await headingShown(page), `${width}×${height} ${lang}: the trip name and the date stay put while the sheet is dragged up`);
         await page.mouse.up();
         await page.locator('body[data-sheet="half"]').waitFor();
         await sheetSettled(page);
-        assert.equal(await panel.evaluate(element => element.scrollTop), scrolled, `${width}×${height} ${lang}: the stops are where they were`);
-        await lowerSheet(page);
-        await raiseSheet(page);
-        assert.equal(await panel.evaluate(element => element.scrollTop), scrolled, `${width}×${height} ${lang}: the keys return to the same stops`);
+        assert.equal(await panel.evaluate(element => element.scrollTop), 0, `${width}×${height} ${lang}: the raised sheet starts at its top`);
       }
       await page.close();
     }
@@ -846,9 +843,7 @@ await test('another day or the whole trip chosen in a lowered short sheet opens 
     await page.locator('body.trip-overview').waitFor();
     assert.ok(await headingShown(page), 'the lowered sheet names the whole trip under the trip name');
     await raiseSheet(page);
-    const offset = await page.evaluate(() =>
-      document.querySelector('.daybar')!.getBoundingClientRect().top - document.getElementById('sheetHandle')!.getBoundingClientRect().bottom);
-    assert.ok(Math.abs(offset) <= 1, `the list of days starts under the handle, found ${offset}`);
+    assert.equal(await panel.evaluate(element => element.scrollTop), 0, 'the whole trip opens from its start');
   } finally {
     await browser.close();
   }

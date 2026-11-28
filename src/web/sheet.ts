@@ -11,18 +11,14 @@ export const sheetLayout = '(max-width: 559px), (max-width: 820px) and (min-heig
  * On a narrow screen with height to spare the panel is a sheet over the map. It rests at one of three heights, chosen with the handle:
  * a tap raises or lowers it, a drag settles on the nearest height, and the up and down arrow keys step through all three.
  * On a wide screen the panel sits beside the route and this height is unused.
- * `behind` is what a full sheet covers. `onSettle` runs after the traveler moves the sheet.
+ * `behind` is what a full sheet covers. `onSettle` runs after the traveler moves the sheet, with the height it left.
  */
-export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behind: HTMLElement, peek: () => number, preview: () => number, onSettle: () => void) {
+export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behind: HTMLElement, peek: () => number, preview: () => number, onSettle: (from: SheetStop) => void) {
   const narrow = matchMedia(sheetLayout);
   const portrait = matchMedia('(orientation: portrait) and (min-height: 541px) and (max-width: 820px)');
   let stop: SheetStop = 'half',
     drag: { y: number, height: number, moved: boolean } | null = null,
-    dragged = false,
-    // In a short window the stylesheet scrolls the whole panel, trip name and days included.
-    // Lowered, the sheet has to show those, so the panel is held at its top and its scrolling waits here.
-    held = false,
-    parked: (() => void) | null = null;
+    dragged = false;
   // The full sheet leaves the bar above it uncovered. The lowest stop is as tall as the caller says the trip's heading is.
   const heights = () => {
     const full = Math.max(240, innerHeight - 64);
@@ -31,31 +27,13 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     return { peek: Math.min(full, Math.max(96, peek())), half: Math.ceil(Math.max(innerHeight * .55, day)), full };
   };
   const setHeight = (pixels: number) => document.documentElement.style.setProperty('--sheet', pixels + 'px');
-  function showParked() {
-    held = false;
-    delete panel.dataset.held;
-    panel.scrollTop = 0;
-    parked?.();
-  }
   function rest(next: SheetStop) {
-    const hold = narrow.matches && next === 'peek';
-    if (hold && !held && !parked) {
-      const offset = panel.scrollTop;
-      parked = () => {
-        panel.scrollTop = offset;
-      };
-    }
+    const raised = stop === 'peek' && next !== 'peek';
     stop = next;
     document.body.dataset.sheet = next;
+    // In a short window the lowered sheet is no scroller, and a browser may hand back the offset it had before.
+    if (raised) panel.scrollTop = 0;
     setHeight(heights()[next]);
-    if (hold) {
-      held = true;
-      panel.scrollTop = 0;
-      panel.dataset.held = '';
-    } else {
-      if (held) showParked();
-      parked = null;
-    }
     // A full sheet covers the map, so the keyboard skips the controls and pins behind it.
     behind.inert = narrow.matches && next === 'full';
     handle.setAttribute('aria-expanded', String(next === 'full'));
@@ -64,8 +42,9 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
       : language === 'he' ? 'הגדלת הרשימה' : 'Raise the list');
   }
   function settle(next: SheetStop) {
+    const from = stop;
     rest(next);
-    onSettle();
+    onSettle(from);
   }
   handle.addEventListener('pointerdown', event => {
     drag = { y: event.clientY, height: panel.getBoundingClientRect().height, moved: false };
@@ -78,8 +57,6 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     if (!drag.moved) return;
     const { peek, full } = heights();
     panel.dataset.dragging = '';
-    // What waited stays parked, for a drag that ends where it began.
-    if (held) showParked();
     setHeight(Math.max(peek, Math.min(full, drag.height + raised)));
   });
   function release() {
@@ -104,7 +81,6 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     // Measured from the top of the sheet, so the answer is the same while the sheet is still on its way down.
     const box = target.getBoundingClientRect(), top = panel.getBoundingClientRect().top;
     if (box.top >= top && box.bottom <= top + heights().peek) return;
-    if (held) parked = () => target.scrollIntoView({ block: 'nearest' });
     settle('half');
     // The list has room for the row once the sheet has finished rising.
     setTimeout(() => {
@@ -140,13 +116,6 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
       return narrow.matches ? heights()[stop === 'full' ? 'half' : stop] : 0;
     },
     rest,
-    relabel: () => rest(stop),
-    get lowered() {
-      return held;
-    },
-    scroll(move: () => void) {
-      parked = held ? move : null;
-      if (!held) move();
-    }
+    relabel: () => rest(stop)
   };
 }
