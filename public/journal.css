@@ -583,6 +583,8 @@ label input, label textarea, label select { width: 100%; font-size: var(--body) 
   #sheetHandle:focus-visible { outline: 0 }
   #sheetHandle:focus-visible::before { outline: 3px solid var(--focus); outline-offset: 3px }
   .top { padding-block-start: 0 }
+  .stop { padding-block: 4px }
+  .stop:not(:last-child)::after { inset-block: calc(4px + 1.75rem + 3px) -1px }
   /* The legend sits above the map credit, which sits on the sheet. */
   .legend { inset-block-end: calc(var(--sheet, 55vh) + 26px); inset-inline-start: var(--edge) }
   body:not([data-sheet="peek"]) .legend { display: none }

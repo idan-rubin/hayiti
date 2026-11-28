@@ -145,7 +145,7 @@ const heading = () => {
 };
 // Room under the heading for the day's summary, three ordinary stops and the day's actions, in rem as the stylesheet
 // sets them. Measuring the day's own stops instead would move the dates under the finger that turns them.
-const firstStopsRoom = 18;
+const firstStopsRoom = 16;
 const sheet = createSheet($('panel'), $('sheetHandle'), map.getContainer().parentElement!, heading, () =>
   heading() + firstStopsRoom * parseFloat(getComputedStyle(document.documentElement).fontSize), () => fitRoute());
 const mapSection = map.getContainer().parentElement!,
