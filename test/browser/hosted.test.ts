@@ -132,10 +132,10 @@ await test('a shared route stays on screen through a temporary failure and clear
     assert.equal(await page.locator('body').getAttribute('data-sheet'), 'half');
     await page.getByRole('status').filter({ hasText: 'Shared route · View only' }).waitFor();
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.locator('nav #mapStyle').waitFor();
     assert.equal(await page.locator('#share').isVisible(), false);
     const wholeTrip = page.locator('#wholeTrip');
     await openMenu(page);
+    await page.locator('#menu #mapStyle').waitFor();
     assert.deepEqual(await page.locator('#menu button:visible').allInnerTexts(), ['Whole trip']);
     assert.equal(await page.locator('#menu .beta-links').isVisible(), false);
     await wholeTrip.click();

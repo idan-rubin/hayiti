@@ -213,10 +213,7 @@ nav { pointer-events: none }
 .brand-signature { display: block; width: auto; height: 1.3rem }
 nav { justify-content: flex-end; gap: 6px }
 #share svg { display: none }
-nav :is(button, a, select) { min-height: var(--bar); border-color: transparent; border-radius: var(--pill); box-shadow: var(--shadow) }
-nav .map-style-label { display: none }
-.map-style { margin: 0 }
-.map-style select { width: auto; padding: .4rem .8rem; color: var(--pine); font-weight: 560; cursor: pointer }
+nav > * { min-height: var(--bar); border-color: transparent; border-radius: var(--pill); box-shadow: var(--shadow) }
 nav a { display: inline-flex; align-items: center }
 nav .icon { width: var(--bar) }
 .header-short { display: none }
@@ -238,9 +235,9 @@ nav .icon { width: var(--bar) }
 #menu .map-style {
   display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px;
   min-height: 2.75rem; padding-inline: .8rem 2px; color: var(--pine); font-size: var(--body); font-weight: 560;
-  margin-block-end: 2px; padding-block-end: 4px; border-block-end: 1px solid var(--line);
+  margin: 0 0 2px; padding-block-end: 4px; border-block-end: 1px solid var(--line);
 }
-#menu .map-style select { min-height: 2.25rem }
+#menu .map-style select { width: auto; min-height: 2.25rem; padding: .4rem .8rem; color: var(--pine); font-weight: 560; cursor: pointer }
 .beta-links {
   display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; padding: .55rem .8rem .3rem;
   border-top: 1px solid var(--line); color: var(--muted); font-size: var(--small);
@@ -542,7 +539,7 @@ label input, label textarea, label select { width: 100%; font-size: var(--body) 
 @media (max-width: 1000px) {
   header { gap: 6px }
   nav { flex: none; flex-wrap: nowrap; gap: 4px }
-  nav :is(button, a, select) { padding-inline: .6rem }
+  nav > * { padding-inline: .6rem }
   .brand { flex: 0 1 auto; min-width: 0; padding-inline: .6rem }
   .brand-signature { width: clamp(2.6rem, 22vw, 5.4rem); height: auto }
   #languageSwitch { padding: .4rem 1.5rem .4rem .6rem; background-position: right .5rem center }

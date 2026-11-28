@@ -372,36 +372,32 @@ await test('a phone held sideways shows the panel beside the map, with the route
   }
 });
 
-await test('the map style sits next to Share in the header and moves into the menu over a sheet, in either language', async () => {
+await test('small wheel movements accumulate in both directions around the pointed stop', async () => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-    // A guest's bar is the widest: it adds the sign-in button.
-    await hostTrip(page, null);
-    await page.locator('#login').waitFor();
-    for (const lang of ['en', 'he']) {
-      await page.locator('#languageSwitch').selectOption(lang);
-      for (const height of [800, 390]) {
-        for (const width of [560, 667, 821, 844, 900, 932, 1000, 1001, 1100, 1280]) {
-          await page.setViewportSize({ width, height });
-          if (await page.locator('#sheetHandle').isVisible()) {
-            await page.locator('#menu #mapStyle').waitFor({ state: 'attached' });
-            assert.equal(await page.locator('nav #mapStyle').count(), 0);
-            continue;
-          }
-          await page.locator('nav #mapStyle').waitFor();
-          const style = (await page.locator('#mapStyle').boundingBox())!;
-          const share = (await page.locator('#share').boundingBox())!;
-          const brand = (await page.locator('.brand').boundingBox())!;
-          const gap = await page.locator('header nav').evaluate(nav => parseFloat(getComputedStyle(nav).columnGap));
-          const distance = lang === 'he' ? style.x - (share.x + share.width) : share.x - (style.x + style.width);
-          const size = `${lang} ${width}x${height}`;
-          assert.ok(Math.abs(distance - gap) < 1, `${size}: the map style is one toolbar gap from Share`);
-          assert.equal(style.y, share.y, size);
-          assert.equal(style.height, share.height, size);
-          assert.ok(lang === 'he' ? style.x + style.width <= brand.x : brand.x + brand.width <= style.x, `${size}: the brand is clear`);
-        }
+    const date = '2026-06-14';
+    await hostTrip(page, { id: 'zoom', title: 'Harbor walk', start: date, end: date, stops: dayOfStops(date, harbor.slice(0, 2)) });
+    await page.locator('.leaflet-marker-icon').nth(1).waitFor();
+    const pins = page.locator('.leaflet-marker-icon');
+    const geometry = () => pins.evaluateAll(elements => {
+      const [a, b] = elements.map(pin => pin.getBoundingClientRect());
+      return { x: a.x + a.width / 2, y: a.bottom, distance: Math.hypot(b.x - a.x, b.y - a.y) };
+    });
+    const before = await geometry();
+    const map = page.locator('#map');
+    for (const direction of [-1, 1]) {
+      // Eight small line-mode deltas add up to a fifth of a zoom level.
+      for (let i = 0; i < 8; i++) {
+        await map.dispatchEvent('wheel', { deltaY: direction * .075, deltaMode: 1, clientX: before.x, clientY: before.y });
       }
+      const expected = before.distance * (direction < 0 ? 2 ** .2 : 1);
+      await page.waitForFunction(({ expected }) => {
+        const [a, b] = [...document.querySelectorAll('.leaflet-marker-icon')].map(pin => pin.getBoundingClientRect());
+        return Math.abs(Math.hypot(b.x - a.x, b.y - a.y) - expected) < 3;
+      }, { expected }, { timeout: 3000 });
+      const after = await geometry();
+      assert.ok(Math.hypot(after.x - before.x, after.y - before.y) < 4, 'the pointed stop stays under the cursor');
     }
   } finally {
     await browser.close();
@@ -625,12 +621,9 @@ await test('over a sheet the map style is in the menu and the legend shows only 
     await openMenu(page);
     await style.focus();
     await page.setViewportSize({ width: 844, height: 390 });
-    await waitForVisibleFocus(page, 'nav #mapStyle');
-    assert.equal(await page.locator('#menu').isVisible(), false);
+    await waitForVisibleFocus(page, '#menu #mapStyle');
     await page.setViewportSize({ width: 390, height: 664 });
-    await waitForVisibleFocus(page, '#menuButton');
-    await page.keyboard.press('Enter');
-    await style.waitFor();
+    await waitForVisibleFocus(page, '#menu #mapStyle');
     assert.equal(await page.locator('#mapStyle').inputValue(), 'terrain');
   } finally {
     await browser.close();

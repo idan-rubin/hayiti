@@ -9,6 +9,7 @@ import { routeStops, dayDetails, isMappedStop, indexEdges, suggest, walkingStats
 import { createDateReel } from './date-reel.ts';
 import { createSheet, sheetLayout } from './sheet.ts';
 import { fitPadding } from './map-fit.ts';
+import { enableWheelZoom } from './map-zoom.ts';
 import { cleanTrip, cleanStop, mergeGooglePins, removeGooglePin, restoreGooglePin, mergeStops, combineEvidence, journalCharacterLimit, unidentifiedMerchant } from '../domain/core.ts';
 import { importEvidencePackage, prepareTripBackup, importCsv, importIcs, pastedStop } from '../domain/importers.ts';
 import { checkGuestBackup, discardGuest, onGuestChange, guestMergeRequested, requestGuestMerge, hasLegacyGuestTrips } from './guest-draft.ts';
@@ -118,11 +119,13 @@ const button = (title: string, fn: () => void) => {
 };
 const map = L.map('map', {
   zoomControl: true,
-  scrollWheelZoom: true,
+  scrollWheelZoom: false,
   trackResize: false,
-  zoomSnap: .25,
+  zoomSnap: 0,
+  zoomDelta: .5,
   maxZoom: 19
 }).setView([30, 15], 2);
+enableWheelZoom(map);
 // Taxi dashes sit above walking paths (400) and below stop markers (600), in either travel order.
 map.createPane('taxiRoutes').style.zIndex = '410';
 const overlay = L.layerGroup().addTo(map);
@@ -164,23 +167,7 @@ new ResizeObserver(() => {
   fitPopupPadding();
   if (openPopup) updatePopup(openPopup);
 }).observe($('status'), { box: 'border-box' });
-const mapStyleLabel = $('mapStyle').closest('label')!;
-const sheetWidth = matchMedia(sheetLayout);
-function placeMapStyle() {
-  const menu = $('menu'), picker = $('mapStyle');
-  const focused = document.activeElement === picker;
-  if (sheetWidth.matches) {
-    $('export').before(mapStyleLabel);
-    if (focused) (menu.matches(':popover-open') ? picker : $('menuButton')).focus({ preventScroll: true });
-  } else {
-    if (focused && menu.matches(':popover-open')) menu.hidePopover();
-    $('share').before(mapStyleLabel);
-    if (focused) picker.focus({ preventScroll: true });
-  }
-}
-placeMapStyle();
-sheetWidth.addEventListener('change', () => {
-  placeMapStyle();
+matchMedia(sheetLayout).addEventListener('change', () => {
   fitRoute();
   keepInView();
 });

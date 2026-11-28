@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { strFromU8, unzipSync } from 'fflate';
 import { chromium, type Page } from 'playwright-core';
 import { readPortableRecord, waitForPortableTrip } from './portable-storage-helpers.ts';
-import { backUpTrip, restSheet, toggleWholeTrip } from './journal-controls.ts';
+import { backUpTrip, openMenu, restSheet, toggleWholeTrip } from './journal-controls.ts';
 
 async function openSampleTrip(page: Page) {
   await page.getByRole('button', { name: 'Try the sample trip' }).click();
@@ -750,8 +750,11 @@ await test('the street map note goes away once every street tile in view has loa
     assert.equal(await page.locator('#map').getAttribute('data-note'), 'The street map could not load. Pins and routes still appear.');
 
     // A closer view needs other tiles. They load, and nothing in view is missing any more.
-    await page.locator('.leaflet-control-zoom-in').click();
-    await page.locator('.leaflet-control-zoom-in').click();
+    for (let step = 0; step < 4; step++) {
+      await page.locator('.leaflet-control-zoom-in').click();
+      await page.locator('.leaflet-zoom-anim').waitFor({ state: 'attached' });
+      await page.locator('.leaflet-zoom-anim').waitFor({ state: 'detached' });
+    }
     await page.locator('#map:not([data-note]) canvas.maplibregl-canvas').waitFor();
     assert.equal(described, 1, 'the street map was not drawn again from the start');
   } finally {
@@ -1032,6 +1035,7 @@ await test('changing a basemap loads its tiles without moving the daily route or
     const original = await places(), route = await shape();
     assert.ok(original.length > 1 && route.length > 0);
     for (const [choice, provider] of [['satellite', 'eox.at'], ['terrain', 'opentopomap.org']] as const) {
+      await openMenu(page);
       await types.selectOption(choice);
       await page.locator('.leaflet-tile-loaded[src*="' + provider + '"]').first().waitFor();
       assert.deepEqual(await places(), original);
@@ -1039,6 +1043,7 @@ await test('changing a basemap loads its tiles without moving the daily route or
       assert.equal(await scope.getAttribute('aria-pressed'), 'false');
       assert.equal(await page.locator('#tripDate').inputValue(), day);
     }
+    await openMenu(page);
     await types.selectOption('streets');
     assert.equal(await page.locator('.leaflet-tile-loaded').count(), 0);
     assert.deepEqual(await places(), original);

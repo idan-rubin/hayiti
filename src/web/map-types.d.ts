@@ -3,6 +3,10 @@ type Coordinates = import('../domain/core.ts').Point;
 interface MapPoint {
   equals(other: MapPoint): boolean;
 }
+interface PixelPoint {
+  subtract(other: PixelPoint): PixelPoint;
+  divideBy(value: number): PixelPoint;
+}
 interface Bounds {
   extend(points: Coordinates | Coordinates[]): Bounds;
   isValid(): boolean;
@@ -16,6 +20,16 @@ interface MapControl {
 interface JournalMap {
   zoomControl: MapControl;
   attributionControl: MapControl;
+  getZoom(): number;
+  getMinZoom(): number;
+  getMaxZoom(): number;
+  getSize(): PixelPoint;
+  mouseEventToContainerPoint(event: MouseEvent): PixelPoint;
+  mouseEventToLatLng(event: MouseEvent): MapPoint;
+  project(position: MapPoint, zoom: number): PixelPoint;
+  unproject(point: PixelPoint, zoom: number): MapPoint;
+  flyTo(center: MapPoint, zoom: number, options: { animate: boolean; duration: number }): void;
+  on(type: 'moveend', callback: () => void): void;
   createPane(name: string): HTMLElement;
   /** Moves the view by this many pixels; positive values show more of the map to the right and below. */
   panBy(offset: Coordinates, options: {
@@ -105,11 +119,13 @@ type StreetMapLayerFactory = (options: {
 /** Absent when the hosted journal could not download the library. */
 declare const maplibregl: MapLibrary | undefined;
 declare const L: {
+  DomEvent: { getWheelDelta(event: WheelEvent): number };
   map(id: string, options: {
     zoomControl: boolean;
     scrollWheelZoom: boolean;
     trackResize: boolean;
     zoomSnap: number;
+    zoomDelta: number;
     maxZoom: number;
   }): JournalMap;
   maplibreGL?: StreetMapLayerFactory;
