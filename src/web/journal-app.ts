@@ -832,8 +832,11 @@ function showSelected() {
 }
 function keepInView() {
   const focused = document.activeElement;
-  if (focused instanceof HTMLElement && focused.closest('.listbody')) focused.scrollIntoView({ block: 'nearest' });
-  else showSelected();
+  if (focused instanceof HTMLElement && $('panel').contains(focused) && focused.getClientRects().length) {
+    focused.scrollIntoView({ block: 'nearest' });
+  } else {
+    showSelected();
+  }
 }
 // Must match the short window's media query in journal.css, where the whole panel scrolls in place of the list.
 matchMedia('(max-height: 540px)').addEventListener('change', keepInView);

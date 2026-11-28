@@ -740,20 +740,56 @@ await test('a stop chosen on the map stays in view when the phone is turned, wit
   }
 });
 
-await test('a list control that has focus stays in view when the phone is turned, ahead of the chosen stop', async () => {
+function waitForVisibleFocus(page: Page, selector: string) {
+  return page.waitForFunction(selector => {
+    const focused = document.activeElement;
+    if (!focused?.matches(selector)) return false;
+    const box = focused.getBoundingClientRect(), x = box.left + box.width / 2;
+    return box.height > 0 && [box.top + 1, box.bottom - 1].every(y => focused.contains(document.elementFromPoint(x, y)));
+  }, selector, { timeout: 3000 });
+}
+
+await test('a focused panel control stays in view when the phone turns, ahead of the chosen stop', async () => {
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
     const date = '2026-06-14';
-    await hostTrip(page, { id: 'turn', title: 'Turning', start: date, end: date, stops: dayOfStops(date, harbor) });
-    await page.locator('.leaflet-marker-icon').nth(7).waitFor();
-    await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
-    await page.locator('#stops .stopname').filter({ hasText: 'North park' }).focus();
-    await page.setViewportSize({ width: 844, height: 390 });
-    await page.waitForFunction(() => {
-      const focused = document.activeElement!.getBoundingClientRect(), actions = document.querySelector('.toolbar')!.getBoundingClientRect();
-      return document.activeElement!.textContent === 'North park' && focused.top >= 0 && focused.bottom <= actions.top + 1;
-    }, null, { timeout: 3000 }).catch(() => assert.fail('the focused stop is out of sight after the turn'));
+    for (const [width, height, turnedWidth, turnedHeight, selector] of [
+      [390, 844, 844, 390, '#stops .stop:first-child .stopname'],
+      [411, 400, 667, 375, '#dayReel']
+    ] as const) {
+      const page = await browser.newPage({ viewport: { width, height }, hasTouch: true });
+      await hostTrip(page, { id: 'turn', title: 'Turning', start: date, end: date, stops: dayOfStops(date, harbor) });
+      await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
+      await page.locator(selector).focus();
+      await page.setViewportSize({ width: turnedWidth, height: turnedHeight });
+      await waitForVisibleFocus(page, selector);
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+await test('returning to a lowered sheet makes room for the stop focused in landscape', async () => {
+  const browser = await chromium.launch();
+  try {
+    const date = '2026-06-14';
+    for (const [width, height] of [[390, 844], [411, 400]]) {
+      const page = await browser.newPage({ viewport: { width, height }, hasTouch: true });
+      await hostTrip(page, { id: 'turn', title: 'Turning', start: date, end: date, stops: dayOfStops(date, harbor) });
+      for (const selector of ['#stops .stop:first-child .stopname', '#stops .stop:last-child .stopname']) {
+        await lowerSheet(page);
+        await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
+        await page.setViewportSize({ width: 844, height: 390 });
+        assert.ok(await chosenShows(page));
+        await page.locator(selector).focus();
+        await page.setViewportSize({ width, height });
+        await page.locator('body[data-sheet="half"]').waitFor({ timeout: 3000 });
+        await sheetSettled(page);
+        await waitForVisibleFocus(page, selector);
+      }
+      await page.close();
+    }
   } finally {
     await browser.close();
   }

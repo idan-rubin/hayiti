@@ -99,20 +99,19 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     if (dragged) dragged = false;
     else settle(stop === 'half' ? 'full' : 'half');
   });
-  // Lowered, the sheet shows only the trip and its days. When the keyboard moves on to a stop or an action
-  // below them, the sheet rises so that focus is never somewhere out of sight.
-  panel.addEventListener('focusin', event => {
-    const target = event.target;
-    if (!narrow.matches || stop !== 'peek' || !(target instanceof HTMLElement) || target === handle) return;
+  function raiseForFocus(target: EventTarget | null) {
+    if (!narrow.matches || stop !== 'peek' || !(target instanceof HTMLElement) || target === handle || !panel.contains(target)) return;
     // Measured from the top of the sheet, so the answer is the same while the sheet is still on its way down.
-    if (target.getBoundingClientRect().bottom - panel.getBoundingClientRect().top <= heights().peek) return;
+    const box = target.getBoundingClientRect(), top = panel.getBoundingClientRect().top;
+    if (box.top >= top && box.bottom <= top + heights().peek) return;
     if (held) parked = () => target.scrollIntoView({ block: 'nearest' });
     settle('half');
     // The list has room for the row once the sheet has finished rising.
     setTimeout(() => {
       if (document.activeElement === target) target.scrollIntoView({ block: 'nearest' });
     }, 260);
-  });
+  }
+  panel.addEventListener('focusin', event => raiseForFocus(event.target));
   handle.addEventListener('keydown', event => {
     const step = event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0;
     if (!step) return;
@@ -120,7 +119,11 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     const next = order[Math.max(0, Math.min(order.length - 1, order.indexOf(stop) + step))];
     if (next !== stop) settle(next);
   });
-  addEventListener('resize', () => rest(stop));
+  addEventListener('resize', () => {
+    rest(stop);
+    // Returning from the side panel keeps keyboard focus without firing another focusin.
+    raiseForFocus(document.activeElement);
+  });
   rest(stop);
   return {
     get stop() {
