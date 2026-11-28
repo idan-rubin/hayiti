@@ -133,6 +133,19 @@ summary { cursor: pointer }
 }
 :lang(he) .leaflet-popup-content { direction: rtl }
 .leaflet-popup-content button { min-height: 0; margin-top: .5rem; padding: 4px 10px; font-size: var(--small) }
+#map[data-compact-popup] .leaflet-popup { margin-bottom: 6px }
+#map[data-compact-popup] .leaflet-popup-tip-container { height: 6px }
+#map[data-compact-popup] .leaflet-popup-tip { width: 9px; height: 9px; margin-top: -5px; padding: 0 }
+#map[data-compact-popup] .leaflet-popup-content {
+  margin: 2px 36px 2px 8px;
+  min-width: min(16rem, calc(var(--popup-room-width) - 46px));
+  max-height: max(1px, calc(var(--popup-room-height) - 12px));
+}
+#map[data-compact-popup] .stop-popup:has(> button) {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: .5rem;
+}
+#map[data-compact-popup] .stop-popup > button { position: sticky; top: 0; min-height: 2.25rem; margin: 0 }
+#map[data-compact-popup] .leaflet-popup-close-button { width: 32px; height: 36px; line-height: 36px }
 #map[data-note]::after {
   content: attr(data-note);
   position: absolute; z-index: 300; top: 42%;

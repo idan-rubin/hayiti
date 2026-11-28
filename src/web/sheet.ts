@@ -113,6 +113,9 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
       return narrow.matches ? heights()[stop === 'full' ? 'half' : stop] : 0;
     },
     rest,
+    refreshHeight() {
+      if (!drag?.moved) setHeight(heights()[stop]);
+    },
     relabel: () => rest(stop)
   };
 }

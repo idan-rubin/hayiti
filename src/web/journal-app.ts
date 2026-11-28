@@ -130,18 +130,9 @@ const rows = new Map<string, HTMLElement>(),
   marks = new Map<string, MapMarker>();
 let popupFor = '';
 let openPopup: MapPopup | undefined;
-function setOpenPopup(popup?: MapPopup) {
-  const cover = sheet.cover;
-  openPopup = popup;
-  if (sheet.cover !== cover) {
-    sheet.relabel();
-    fitPopupPadding();
-    popup?.update();
-  }
-}
-map.on('popupopen', event => setOpenPopup(event.popup));
+map.on('popupopen', event => { openPopup = event.popup; });
 map.on('popupclose', event => {
-  if (openPopup === event.popup) setOpenPopup();
+  if (openPopup === event.popup) openPopup = undefined;
 });
 let overviewTripId = '';
 let routeBounds = L.latLngBounds([]),
@@ -150,8 +141,11 @@ const heading = () => {
   const dates = $('dayReel').parentElement!,
     status = $('status');
   // A short window moves a standing status below the list, where it is no part of the heading.
-  const statusAbove = status.offsetHeight > 0 && getComputedStyle(status).order === '0';
-  const last = dates.hidden ? statusAbove ? status : $('range') : dates.parentElement!;
+  if (dates.hidden && status.offsetHeight) {
+    const style = getComputedStyle(status);
+    if (style.order === '0') return status.offsetTop + status.offsetHeight + parseFloat(style.marginBlockEnd);
+  }
+  const last = dates.hidden ? $('range') : dates.parentElement!;
   return last.offsetTop + last.offsetHeight;
 };
 // Room under the heading for the day's summary, three ordinary stops and the day's actions, in rem as the stylesheet
@@ -159,12 +153,17 @@ const heading = () => {
 const firstStopsRoom = 16;
 // Must match the short window's media query in journal.css, where the whole panel scrolls in place of the list.
 const shortWindow = matchMedia('(max-height: 540px)');
-// An open popup needs the map space that the portrait preview otherwise uses for extra rows.
 const sheet = createSheet($('panel'), $('sheetHandle'), map.getContainer().parentElement!, heading, () =>
-  openPopup ? 0 : heading() + firstStopsRoom * parseFloat(getComputedStyle(document.documentElement).fontSize), from => {
+  heading() + firstStopsRoom * parseFloat(getComputedStyle(document.documentElement).fontSize), from => {
   fitRoute();
   if (from === 'peek' && shortWindow.matches) keepInView();
 });
+new ResizeObserver(() => {
+  if (!sheet.narrow || sheet.stop === 'full') return;
+  sheet.refreshHeight();
+  fitPopupPadding();
+  if (openPopup) updatePopup(openPopup);
+}).observe($('status'), { box: 'border-box' });
 const mapSection = map.getContainer().parentElement!,
   mapControls = document.querySelector<HTMLElement>('.map-controls')!;
 const sheetWidth = matchMedia(sheetLayout);
@@ -213,11 +212,23 @@ function coveredEdges() {
 const popupOptions: PopupOptions = { autoPanPaddingTopLeft: [8, 8], autoPanPaddingBottomRight: [8, 8] };
 function fitPopupPadding() {
   const container = map.getContainer(), covered = coveredEdges();
-  popupOptions.autoPanPaddingTopLeft.splice(0, 2, covered.left + 8, covered.top + 8);
-  popupOptions.autoPanPaddingBottomRight.splice(0, 2, covered.right + 8, covered.bottom + 8);
+  const clearHeight = container.clientHeight - covered.top - covered.bottom;
+  const compact = sheet.narrow && clearHeight < 8 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  container.toggleAttribute('data-compact-popup', compact);
+  const verticalGap = compact ? 2 : 8;
+  popupOptions.autoPanPaddingTopLeft.splice(0, 2, covered.left + 8, covered.top + verticalGap);
+  popupOptions.autoPanPaddingBottomRight.splice(0, 2, covered.right + 8, covered.bottom + verticalGap);
   container.style.setProperty('--popup-room-width', (container.clientWidth - covered.left - covered.right - 16) + 'px');
-  container.style.setProperty('--popup-room-height', (container.clientHeight - covered.top - covered.bottom - 16) + 'px');
+  container.style.setProperty('--popup-room-height', (clearHeight - 2 * verticalGap) + 'px');
   return covered;
+}
+function updatePopup(popup: MapPopup) {
+  // Leaflet rebuilds the popup content when it measures and pans it. Keep focus on the same control.
+  const element = popup.getElement();
+  const controls = 'a, button, select';
+  const focused = Array.from(element.querySelectorAll(controls)).indexOf(document.activeElement!);
+  popup.update();
+  if (focused >= 0) element.querySelectorAll<HTMLElement>(controls)[focused]?.focus({ preventScroll: true });
 }
 function fitRoute() {
   if (fitFrame) return;
@@ -266,12 +277,7 @@ function fitRoute() {
       map.closePopup();
       mark.openPopup();
     } else if (openPopup) {
-      // Leaflet rebuilds the popup content when it measures and pans it. Keep focus on the same control.
-      const element = openPopup.getElement();
-      const controls = 'a, button, select';
-      const focused = Array.from(element.querySelectorAll(controls)).indexOf(document.activeElement!);
-      openPopup.update();
-      if (focused >= 0) element.querySelectorAll<HTMLElement>(controls)[focused]?.focus({ preventScroll: true });
+      updatePopup(openPopup);
     }
   });
 }
@@ -582,9 +588,10 @@ function addStopMarker(s: Stop, xy: Point, number: string, tone: number | null) 
     alt: description
   }).addTo(overlay);
   mark.bindPopup(() => {
-    const content = dom('div');
-    content.append(dom('strong', name), dom('div', [s.time, s.address].filter(Boolean).join(' · ')));
-    if (keys.length) content.append(dom('div', keys.map(k => types[k][0] + ' ' + (k === 'card' ? ui('Transaction', 'עסקה') : t(label[k]))).join(' · '), 'popup-sources'));
+    const content = dom('div', undefined, 'stop-popup'), details = dom('div');
+    details.append(dom('strong', name), dom('div', [s.time, s.address].filter(Boolean).join(' · ')));
+    if (keys.length) details.append(dom('div', keys.map(k => types[k][0] + ' ' + (k === 'card' ? ui('Transaction', 'עסקה') : t(label[k]))).join(' · '), 'popup-sources'));
+    content.append(details);
     if (overview) content.append(button(dateLabel(s.date), () => openMapDay(s.date)));
     else if (!sharedRoute) content.append(button(ui('Edit details', 'עריכת הפרטים'), () => {
       map.closePopup();
@@ -1959,8 +1966,8 @@ function refreshLanguage() {
   localizeControls();
   basemap.relabel();
   showStreetMapNote();
-  render();
   $('status').textContent = currentStatus();
+  render();
 }
 $('trySample').onclick = () => void change(() => {
   const sample = cleanTrip(sampleTrip.trip);

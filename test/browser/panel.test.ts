@@ -95,7 +95,7 @@ await test('a stop popup shows its edit action above the sheet on short phones',
   try {
     const date = '2026-06-14';
     for (const [width, height] of [[375, 553], [320, 568], [390, 664]]) {
-      const page = await browser.newPage({ viewport: { width, height }, hasTouch: true });
+      const page = await browser.newPage({ viewport: { width, height }, hasTouch: true, reducedMotion: 'reduce' });
       await hostTrip(page, {
         id: 'trip', title: 'October road trip through the Scottish Highlands and the Isle of Skye',
         start: date, end: '2026-06-23', stops: dayOfStops(date, harbor)
@@ -103,8 +103,16 @@ await test('a stop popup shows its edit action above the sheet on short phones',
       const locate = page.getByRole('button', { name: 'Show on map: North park' });
       await locate.waitFor();
       await sheetSettled(page);
-      const targetHeight = () => page.locator('html').evaluate(root => root.style.getPropertyValue('--sheet'));
-      const preview = await targetHeight();
+      const panel = page.locator('#panel');
+      const preview = (await panel.boundingBox())!.height;
+      const marker = page.locator('.leaflet-marker-icon[title^="Ferry dock"]');
+      await marker.tap();
+      await page.locator('.leaflet-popup-content').waitFor();
+      await sheetSettled(page);
+      assert.ok(Math.abs((await panel.boundingBox())!.height - preview) < 1, 'opening a pin keeps the list in place');
+      await page.locator('.leaflet-popup-close-button').tap();
+      await sheetSettled(page);
+      assert.ok(Math.abs((await panel.boundingBox())!.height - preview) < 1, 'closing the pin keeps the list in place');
       await restSheet(page, 'full');
       await locate.tap();
       const edit = page.locator('.leaflet-popup-content').getByRole('button', { name: 'Edit details' });
@@ -119,7 +127,7 @@ await test('a stop popup shows its edit action above the sheet on short phones',
       await edit.tap();
       await page.locator('#edit[open]').waitFor();
       await sheetSettled(page);
-      assert.equal(await targetHeight(), preview);
+      assert.ok(Math.abs((await panel.boundingBox())!.height - preview) < 1);
       await page.close();
     }
   } finally {

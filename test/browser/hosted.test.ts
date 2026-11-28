@@ -39,6 +39,39 @@ async function hostJournal(page: Page, api: (route: Route) => Promise<void> | vo
   });
 }
 
+await test('a lowered sheet fits a late journal error and its translation', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 375, height: 553 }, reducedMotion: 'reduce' });
+    let failLoad = () => {};
+    const pending = new Promise<void>(resolve => { failLoad = resolve; });
+    await hostJournal(page, async route => {
+      await pending;
+      await route.fulfill({ status: 503 });
+    });
+    await page.goto(origin + '/journal.html?lang=en');
+    await page.locator('#sheetHandle').press('ArrowDown');
+    await page.locator('body[data-sheet="peek"]').waitFor();
+    failLoad();
+    await page.locator('#status').filter({ hasText: 'Choose Try again.' }).waitFor();
+    const checkStatus = async () => {
+      await page.waitForFunction(() => {
+        const status = document.getElementById('status')!.getBoundingClientRect();
+        const panel = document.getElementById('panel')!.getBoundingClientRect();
+        return status.height > 0 && status.top >= panel.top && status.bottom <= panel.bottom;
+      }, null, { timeout: 3000 });
+      assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
+    };
+    await checkStatus();
+    for (const lang of ['he', 'en']) {
+      await page.locator('#languageSwitch').selectOption(lang);
+      await checkStatus();
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
 await test('a trip started before signing in is added to the journal after sign-in', async () => {
   const browser = await chromium.launch();
   try {
