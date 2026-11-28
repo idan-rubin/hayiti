@@ -1412,6 +1412,9 @@ await test('the date reel turns through the days, and the day count follows it b
           assert.equal(await progress.innerText(), dayLabel(day));
           assert.equal(await reel.getAttribute('aria-valuenow'), String(day));
         }
+        await reel.press('Space');
+        await page.waitForTimeout(300);
+        assert.equal(await progress.innerText(), dayLabel(4), 'Space leaves the day as it is');
         await reel.press('End');
         assert.equal(await progress.innerText(), dayLabel(31));
         assert.equal(await page.locator('#tripDate').inputValue(), '2026-11-19');

@@ -53,9 +53,10 @@ export function createDateReel(reel: HTMLElement, menu: HTMLSelectElement, progr
     passive: true
   });
   reel.addEventListener('keydown', event => {
-    if (wholeTripLabel && (event.key === 'Enter' || event.key === ' ')) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      // Left to the browser, Space pages the reel's own scrolling and turns the day with it.
       event.preventDefault();
-      onChange(dates[current]);
+      if (wholeTripLabel) onChange(dates[current]);
       return;
     }
     const shortcuts: Record<string, number> = {

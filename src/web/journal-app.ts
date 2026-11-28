@@ -148,8 +148,11 @@ let routeBounds = L.latLngBounds([]),
   fitFrame = 0;
 // Lowered all the way, the sheet still shows the trip and its days.
 const heading = () => {
-  const dates = $('dayReel').parentElement!;
-  const last = dates.hidden ? $('range') : dates.parentElement!;
+  const dates = $('dayReel').parentElement!,
+    status = $('status');
+  // A short window moves a standing status below the list, where it is no part of the heading.
+  const statusAbove = status.offsetHeight > 0 && getComputedStyle(status).order === '0';
+  const last = dates.hidden ? statusAbove ? status : $('range') : dates.parentElement!;
   return last.offsetTop + last.offsetHeight;
 };
 // Room under the heading for the day's summary, three ordinary stops and the day's actions, in rem as the stylesheet

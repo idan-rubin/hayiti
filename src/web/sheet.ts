@@ -95,11 +95,9 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     const next = order[Math.max(0, Math.min(order.length - 1, order.indexOf(stop) + step))];
     if (next !== stop) settle(next);
   });
-  addEventListener('resize', () => {
-    rest(stop);
-    // Returning from the side panel keeps keyboard focus without firing another focusin.
-    raiseForFocus(document.activeElement);
-  });
+  addEventListener('resize', () => rest(stop));
+  // Returning from the side panel keeps keyboard focus without firing another focusin.
+  narrow.addEventListener('change', () => raiseForFocus(document.activeElement));
   rest(stop);
   return {
     get stop() {
