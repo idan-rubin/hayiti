@@ -90,6 +90,43 @@ await test('a long day note scrolls with the stops and leaves them within reach 
   }
 });
 
+await test('a stop popup shows its edit action above the sheet on short phones', async () => {
+  const browser = await chromium.launch();
+  try {
+    const date = '2026-06-14';
+    for (const [width, height] of [[375, 553], [320, 568], [390, 664]]) {
+      const page = await browser.newPage({ viewport: { width, height }, hasTouch: true });
+      await hostTrip(page, {
+        id: 'trip', title: 'October road trip through the Scottish Highlands and the Isle of Skye',
+        start: date, end: '2026-06-23', stops: dayOfStops(date, harbor)
+      });
+      const locate = page.getByRole('button', { name: 'Show on map: North park' });
+      await locate.waitFor();
+      await sheetSettled(page);
+      const targetHeight = () => page.locator('html').evaluate(root => root.style.getPropertyValue('--sheet'));
+      const preview = await targetHeight();
+      await restSheet(page, 'full');
+      await locate.tap();
+      const edit = page.locator('.leaflet-popup-content').getByRole('button', { name: 'Edit details' });
+      await page.waitForFunction(() => {
+        const content = document.querySelector('.leaflet-popup-content');
+        const action = content?.querySelector('button');
+        if (!content || !action) return false;
+        const box = action.getBoundingClientRect(), card = content.getBoundingClientRect();
+        return content.clientHeight >= content.scrollHeight && box.top >= card.top && box.bottom <= card.bottom + 1
+          && action.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+      });
+      await edit.tap();
+      await page.locator('#edit[open]').waitFor();
+      await sheetSettled(page);
+      assert.equal(await targetHeight(), preview);
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
 await test('a popup bound before the window turned sideways opens clear of the panel', async () => {
   const browser = await chromium.launch();
   try {
@@ -588,9 +625,15 @@ await test('over a sheet the map style is in the menu and the legend shows only 
     const legend = (await page.locator('.legend').boundingBox())!;
     const sheet = (await page.locator('#panel').boundingBox())!;
     assert.ok(legend.y + legend.height <= sheet.y, 'the legend sits above the lowered sheet');
+    await openMenu(page);
+    await style.focus();
     await page.setViewportSize({ width: 844, height: 390 });
-    await page.locator('.mapcard #mapStyle').waitFor();
-    assert.equal(await page.locator('#menu #mapStyle').count(), 0);
+    await waitForVisibleFocus(page, '.mapcard #mapStyle');
+    assert.equal(await page.locator('#menu').isVisible(), false);
+    await page.setViewportSize({ width: 390, height: 664 });
+    await waitForVisibleFocus(page, '#menuButton');
+    await page.keyboard.press('Enter');
+    await style.waitFor();
     assert.equal(await page.locator('#mapStyle').inputValue(), 'terrain');
   } finally {
     await browser.close();

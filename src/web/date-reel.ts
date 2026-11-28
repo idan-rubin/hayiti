@@ -59,12 +59,12 @@ export function createDateReel(reel: HTMLElement, menu: HTMLSelectElement, progr
       return;
     }
     const shortcuts: Record<string, number> = {
-      ArrowUp: current - 1,
-      ArrowDown: current + 1,
+      ArrowUp: current + 1,
+      ArrowDown: current - 1,
       Home: 0,
       End: dates.length - 1,
-      PageUp: current - 7,
-      PageDown: current + 7
+      PageUp: current + 7,
+      PageDown: current - 7
     };
     const index = shortcuts[event.key];
     if (index === undefined) return;

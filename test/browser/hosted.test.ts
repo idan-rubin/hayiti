@@ -1407,10 +1407,11 @@ await test('the date reel turns through the days, and the day count follows it b
         await progress.filter({ hasText: dayLabel(4) }).waitFor();
         assert.equal(await page.locator('#tripDate').inputValue(), '2026-10-23');
         assert.deepEqual(await shown(), [await listed()]);
-        await reel.press('ArrowUp');
-        assert.equal(await progress.innerText(), dayLabel(3));
-        await reel.press('PageDown');
-        assert.equal(await progress.innerText(), dayLabel(10));
+        for (const [key, day] of [['ArrowUp', 5], ['ArrowDown', 4], ['PageUp', 11], ['PageDown', 4]] as const) {
+          await reel.press(key);
+          assert.equal(await progress.innerText(), dayLabel(day));
+          assert.equal(await reel.getAttribute('aria-valuenow'), String(day));
+        }
         await reel.press('End');
         assert.equal(await progress.innerText(), dayLabel(31));
         assert.equal(await page.locator('#tripDate').inputValue(), '2026-11-19');

@@ -130,9 +130,18 @@ const rows = new Map<string, HTMLElement>(),
   marks = new Map<string, MapMarker>();
 let popupFor = '';
 let openPopup: MapPopup | undefined;
-map.on('popupopen', event => { openPopup = event.popup; });
+function setOpenPopup(popup?: MapPopup) {
+  const cover = sheet.cover;
+  openPopup = popup;
+  if (sheet.cover !== cover) {
+    sheet.relabel();
+    fitPopupPadding();
+    popup?.update();
+  }
+}
+map.on('popupopen', event => setOpenPopup(event.popup));
 map.on('popupclose', event => {
-  if (openPopup === event.popup) openPopup = undefined;
+  if (openPopup === event.popup) setOpenPopup();
 });
 let overviewTripId = '';
 let routeBounds = L.latLngBounds([]),
@@ -148,8 +157,9 @@ const heading = () => {
 const firstStopsRoom = 16;
 // Must match the short window's media query in journal.css, where the whole panel scrolls in place of the list.
 const shortWindow = matchMedia('(max-height: 540px)');
+// An open popup needs the map space that the portrait preview otherwise uses for extra rows.
 const sheet = createSheet($('panel'), $('sheetHandle'), map.getContainer().parentElement!, heading, () =>
-  heading() + firstStopsRoom * parseFloat(getComputedStyle(document.documentElement).fontSize), from => {
+  openPopup ? 0 : heading() + firstStopsRoom * parseFloat(getComputedStyle(document.documentElement).fontSize), from => {
   fitRoute();
   if (from === 'peek' && shortWindow.matches) keepInView();
 });
@@ -157,8 +167,16 @@ const mapSection = map.getContainer().parentElement!,
   mapControls = document.querySelector<HTMLElement>('.map-controls')!;
 const sheetWidth = matchMedia(sheetLayout);
 function placeMapStyle() {
-  if (sheetWidth.matches) $('menu').insertBefore(mapControls, $('export'));
-  else mapSection.insertBefore(mapControls, mapSection.querySelector('.legend'));
+  const menu = $('menu'), picker = $('mapStyle');
+  const focused = document.activeElement === picker;
+  if (sheetWidth.matches) {
+    menu.insertBefore(mapControls, $('export'));
+    if (focused) (menu.matches(':popover-open') ? picker : $('menuButton')).focus({ preventScroll: true });
+  } else {
+    if (focused && menu.matches(':popover-open')) menu.hidePopover();
+    mapSection.insertBefore(mapControls, mapSection.querySelector('.legend'));
+    if (focused) picker.focus({ preventScroll: true });
+  }
 }
 placeMapStyle();
 sheetWidth.addEventListener('change', () => {
@@ -191,6 +209,14 @@ function coveredEdges() {
 // Leaflet keeps the pairs a popup was bound with and reads them when it opens. Every popup shares these two,
 // and a fit updates them in place, so a popup bound before a resize or a rotation keeps clear of the panel after it.
 const popupOptions: PopupOptions = { autoPanPaddingTopLeft: [8, 8], autoPanPaddingBottomRight: [8, 8] };
+function fitPopupPadding() {
+  const container = map.getContainer(), covered = coveredEdges();
+  popupOptions.autoPanPaddingTopLeft.splice(0, 2, covered.left + 8, covered.top + 8);
+  popupOptions.autoPanPaddingBottomRight.splice(0, 2, covered.right + 8, covered.bottom + 8);
+  container.style.setProperty('--popup-room-width', (container.clientWidth - covered.left - covered.right - 16) + 'px');
+  container.style.setProperty('--popup-room-height', (container.clientHeight - covered.top - covered.bottom - 16) + 'px');
+  return covered;
+}
 function fitRoute() {
   if (fitFrame) return;
   fitFrame = requestAnimationFrame(() => {
@@ -200,12 +226,7 @@ function fitRoute() {
       clientHeight: height
     } = map.getContainer();
     if (!width || !height) return;
-    const covered = coveredEdges();
-    popupOptions.autoPanPaddingTopLeft.splice(0, 2, covered.left + 8, covered.top + 8);
-    popupOptions.autoPanPaddingBottomRight.splice(0, 2, covered.right + 8, covered.bottom + 8);
-    const mapStyle = map.getContainer().style;
-    mapStyle.setProperty('--popup-room-width', (width - covered.left - covered.right - 16) + 'px');
-    mapStyle.setProperty('--popup-room-height', (height - covered.top - covered.bottom - 16) + 'px');
+    const covered = fitPopupPadding();
     map.stop();
     map.invalidateSize({
       pan: false,
