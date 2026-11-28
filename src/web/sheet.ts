@@ -96,7 +96,6 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     if (next !== stop) settle(next);
   });
   addEventListener('resize', () => rest(stop));
-  // Returning from the side panel keeps keyboard focus without firing another focusin.
   narrow.addEventListener('change', () => raiseForFocus(document.activeElement));
   rest(stop);
   return {

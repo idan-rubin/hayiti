@@ -54,7 +54,6 @@ export function createDateReel(reel: HTMLElement, menu: HTMLSelectElement, progr
   });
   reel.addEventListener('keydown', event => {
     if (event.key === 'Enter' || event.key === ' ') {
-      // Left to the browser, Space pages the reel's own scrolling and turns the day with it.
       event.preventDefault();
       if (wholeTripLabel) onChange(dates[current]);
       return;

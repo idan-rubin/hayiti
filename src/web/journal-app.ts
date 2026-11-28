@@ -146,7 +146,6 @@ map.on('popupclose', event => {
 let overviewTripId = '';
 let routeBounds = L.latLngBounds([]),
   fitFrame = 0;
-// Lowered all the way, the sheet still shows the trip and its days.
 const heading = () => {
   const dates = $('dayReel').parentElement!,
     status = $('status');
