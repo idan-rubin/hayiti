@@ -622,11 +622,12 @@ await test('a short, narrow window scrolls the sheet as a whole, so every stop i
   }
 });
 
-const headingShown = (page: Page) => page.evaluate(() => {
+const headingInView = () => {
   const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
   const panel = box('#panel'), handle = box('#sheetHandle');
   return ['#title', '#dayReel', '.date-menu'].every(part => box(part).top >= handle.bottom - 1 && box(part).bottom <= panel.bottom + 1);
-});
+};
+const headingShown = (page: Page) => page.evaluate(headingInView);
 const lowerSheet = async (page: Page) => {
   await page.locator('#sheetHandle').press('ArrowDown');
   await page.locator('body[data-sheet="peek"]').waitFor();
@@ -710,7 +711,6 @@ const chosenShows = (page: Page) => page.waitForFunction(() => {
 await test('a stop chosen on the map stays in view when the phone is turned, with the sheet lowered or at rest', async () => {
   const browser = await chromium.launch();
   try {
-    // A short window scrolls the whole panel and a tall one only the list, so each turn here changes what scrolls.
     for (const [upright, turned] of [[[411, 400], [667, 375]], [[411, 400], [1280, 720]], [[390, 844], [844, 390]]]) {
       for (const lowered of [true, false]) {
         const page = await browser.newPage({ viewport: { width: upright[0], height: upright[1] }, hasTouch: true });
@@ -726,13 +726,34 @@ await test('a stop chosen on the map stays in view when the phone is turned, wit
         await page.setViewportSize({ width: upright[0], height: upright[1] });
         if (lowered) {
           assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
-          assert.ok(await headingShown(page), `${turn} and back: the lowered sheet shows the trip name and the date`);
+          // The page answers the turn in its next frame, after this call returns.
+          await page.waitForFunction(headingInView, null, { timeout: 3000 }).catch(() =>
+            assert.fail(`${turn} and back: the lowered sheet shows the trip name and the date`));
           await raiseSheet(page);
         }
         assert.ok(await chosenShows(page), `${turn} and back: the chosen stop is in view`);
         await page.close();
       }
     }
+  } finally {
+    await browser.close();
+  }
+});
+
+await test('a list control that has focus stays in view when the phone is turned, ahead of the chosen stop', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    const date = '2026-06-14';
+    await hostTrip(page, { id: 'turn', title: 'Turning', start: date, end: date, stops: dayOfStops(date, harbor) });
+    await page.locator('.leaflet-marker-icon').nth(7).waitFor();
+    await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
+    await page.locator('#stops .stopname').filter({ hasText: 'North park' }).focus();
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForFunction(() => {
+      const focused = document.activeElement!.getBoundingClientRect(), actions = document.querySelector('.toolbar')!.getBoundingClientRect();
+      return document.activeElement!.textContent === 'North park' && focused.top >= 0 && focused.bottom <= actions.top + 1;
+    }, null, { timeout: 3000 }).catch(() => assert.fail('the focused stop is out of sight after the turn'));
   } finally {
     await browser.close();
   }

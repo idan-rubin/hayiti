@@ -159,6 +159,7 @@ placeMapStyle();
 sheetWidth.addEventListener('change', () => {
   placeMapStyle();
   fitRoute();
+  keepInView();
 });
 // The map fills the window behind the bar, the map controls and the panel. A route is fitted to what they leave clear.
 function coveredEdges() {
@@ -829,8 +830,13 @@ function showSelected() {
     if (selected === id) showRow(id);
   });
 }
-// A window that grows or loses height changes whether the list or the whole panel scrolls, and neither keeps the other's place.
-matchMedia('(max-height: 540px)').addEventListener('change', showSelected);
+function keepInView() {
+  const focused = document.activeElement;
+  if (focused instanceof HTMLElement && focused.closest('.listbody')) focused.scrollIntoView({ block: 'nearest' });
+  else showSelected();
+}
+// Must match the short window's media query in journal.css, where the whole panel scrolls in place of the list.
+matchMedia('(max-height: 540px)').addEventListener('change', keepInView);
 function reveal(id: string, target: 'row' | 'pin') {
   selected = id;
   for (const [key, row] of rows) row.classList.toggle('activeStop', key === id);
