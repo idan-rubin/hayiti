@@ -35,6 +35,7 @@ await cp('node_modules/maplibre-gl/dist/maplibre-gl.css', output + '/vendor/mapl
 await cp('node_modules/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js', output + '/vendor/leaflet-maplibre-gl.js');
 await build({
   entryPoints: ['src/web/journal-app.ts'],
+  banner: { js: '/*! SortableJS\n' + (await read('node_modules/sortablejs/LICENSE')).trim() + '\n*/' },
   bundle: true,
   minify: true,
   format: 'iife',

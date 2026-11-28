@@ -181,8 +181,7 @@ await test('long stop popups fit beside the landscape panel in both languages', 
         const popup = document.querySelector('.leaflet-popup-content-wrapper')?.getBoundingClientRect();
         if (!popup) return false;
         const panel = document.getElementById('panel')!.getBoundingClientRect();
-        return document.documentElement.dir === 'rtl' ? popup.left >= 0 && popup.right <= panel.left
-          : popup.left >= panel.right && popup.right <= innerWidth;
+        return popup.left >= panel.right && popup.right <= innerWidth;
       });
       // A real click also checks the panel does not cover the close button.
       await page.locator('.leaflet-popup-close-button').click();
@@ -321,7 +320,7 @@ await test('a phone held sideways shows the panel beside the map, with the route
     await page.locator('.leaflet-marker-icon').nth(5).waitFor();
     for (const lang of ['en', 'he']) {
       await page.locator('#languageSwitch').selectOption(lang);
-      // No sheet: the panel is a column on the side where reading starts, narrower than half the window.
+      // No sheet: the panel is a column on the left, narrower than half the window.
       assert.equal(await page.locator('#sheetHandle').isVisible(), false);
       const panel = (await page.locator('#panel').boundingBox())!;
       await page.locator('#panel').evaluate(element => { element.scrollTop = 0; });
@@ -338,14 +337,14 @@ await test('a phone held sideways shows the panel beside the map, with the route
       assert.deepEqual(opening, { firstStop: true, heading: false, count: true, closing: true }, `${lang}: the panel opens on the day`);
       assert.equal(await page.locator('#dayProgress').innerText(), lang === 'he' ? 'יום 1 מתוך 1' : 'Day 1 of 1');
       assert.ok(panel.width <= 667 / 2 && panel.height > 375 / 2, `${lang}: the panel is a column`);
-      assert.ok(lang === 'he' ? panel.x + panel.width > 667 - 16 : panel.x < 16, `${lang}: the panel sits where reading starts`);
+      assert.ok(panel.x < 16, `${lang}: the panel sits on the left`);
       // The whole route is drawn on the part of the map beside it, under the bar.
       await page.waitForFunction(() => {
         const column = document.getElementById('panel')!.getBoundingClientRect();
         const bar = document.querySelector('header nav')!.getBoundingClientRect();
         return [...document.querySelectorAll('.leaflet-marker-icon')].every(pin => {
           const box = pin.getBoundingClientRect();
-          const beside = document.documentElement.dir === 'rtl' ? box.right <= column.left && box.left >= 0 : box.left >= column.right && box.right <= innerWidth;
+          const beside = box.left >= column.right && box.right <= innerWidth;
           return beside && box.top >= bar.bottom && box.bottom <= innerHeight;
         });
       });
@@ -911,13 +910,18 @@ await test('the keyboard never lands under the day\'s actions in a short panel, 
       reached.push(focus.name);
       if (!focus.inFoot) assert.ok(focus.clear, `${focus.name} is in view above the day's actions`);
     }
-    assert.ok(reached.length >= harbor.length * 3 + 3, `the keyboard reached ${reached.length} controls`);
-    assert.ok(reached.includes('Ferry dock') && reached.includes('Sources and import'));
+    for (const [index, name] of harbor.entries()) {
+      assert.ok(reached.includes('Show on map: ' + name));
+      if (index > 0) assert.ok(reached.includes('Move earlier: ' + name));
+      if (index < harbor.length - 1) assert.ok(reached.includes('Move later: ' + name));
+    }
+    assert.ok(reached.includes('Sources and import'));
 
     for (const [width, height] of [[667, 375], [390, 664]]) {
       await page.setViewportSize({ width, height });
       if (await page.locator('#sheetHandle').isVisible()) await restSheet(page, 'full');
       await page.locator('#stops .stopname').first().click();
+      await page.locator('.stop-popup button').click();
       const form = page.locator('#edit');
       await form.waitFor();
       await form.locator('[name="name"]').focus();

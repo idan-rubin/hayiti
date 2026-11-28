@@ -6,6 +6,11 @@ export async function openMenu(page: Page) {
   await page.locator('#menu').waitFor();
 }
 
+export async function editMappedStop(page: Page, name: string) {
+  await page.locator('#stops').getByText(name, { exact: true }).first().click();
+  await page.locator('.leaflet-popup').last().locator('.stop-popup button').click();
+}
+
 export async function toggleWholeTrip(page: Page) {
   await openMenu(page);
   await page.locator('#wholeTrip').click();
