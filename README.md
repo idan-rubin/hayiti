@@ -67,7 +67,7 @@ ChatGPT asks for anything missing, such as the dates or where you stayed. It cro
 
 The sample trip shows a day put back together. Card receipts put you at Café Sonder by the Carmel Market and Anita Gelato in Neve Tzedek. The taxi receipt fills in what card charges can’t. Pickup in Neve Tzedek at 2:40 p.m., drop-off on Shaul HaMelech Boulevard fourteen minutes later. Two more charges follow, at the Tel Aviv Museum of Art and Schnitt Brewing Company, and the calendar has a concert at Tzavta at 8:30.
 
-![The sample route on the streets of Tel Aviv. An orange dashed line marks the taxi ride from Neve Tzedek to Shaul HaMelech Boulevard.](docs/screenshots/sample-street-map.png)
+![The seven-stop Tel Aviv route on desktop. The open hamburger menu shows Map style set to Streets.](docs/screenshots/sample-street-map.png)
 
 The orange dashed line shows the taxi ride. Taxi pins show approximate locations. In an empty journal, choose **Try the sample trip**. The [downloadable example](https://hayiti-beta.cocoacoati256.chatgpt.site/sample-trip.json) contains all seven stops. To add it next to your own trips, import it under **Sources and import** → **Files** and choose **Load trip**.
 
@@ -77,12 +77,12 @@ The orange dashed line shows the taxi ride. Taxi pins show approximate locations
 - **More about this day** holds what could not be placed: places without a pin, visits to confirm and remote purchases.
 - **The date reel** under the trip's name turns from day to day, like the wheel of a slot machine. The arrow beside it lists every date and what is recorded for it.
 - **Whole trip**, in the menu at the end of the bar, shows every day on one map, each day's pins and route in its own color. The same menu row leads back to the day.
-- **Map style** switches between streets, satellite imagery and terrain.
+- **Map style** in the menu switches between streets, satellite imagery and terrain.
 - **Edit anything.** Move a stop up or down, fix a time or an address, or mark a location as approximate.
 
-On a phone, the day's visits sit in a sheet over the map. Tap its handle to raise the list, and again to lower it. Raised, the sheet also shows the trip's dates. Lowered, it leaves the map the screen and the legend appears. The map style is in the menu. Held sideways, the phone shows the day in a panel beside the map.
+On a phone, the day's visits sit in a sheet over the map. Tap its handle to raise the list, and again to lower it. Raised, the sheet also shows the trip's dates. Lowered, it leaves the map the screen and the legend appears. Held sideways, the phone shows the day in a panel beside the map.
 
-<img src="docs/screenshots/sample-stops.png" width="320" alt="The sample day on a phone. The route is on the map, and a sheet under it holds the date, the walking summary and the first stops.">
+<img src="docs/screenshots/sample-stops.png" width="320" alt="The Tel Aviv route on a phone. The sheet below the map shows Thursday, March 12, about 3.3 km on foot, and the first stops starting at Café Sonder.">
 
 ## It is your record
 
