@@ -4,27 +4,31 @@ export function enableWheelZoom(map: JournalMap) {
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let target: number | undefined;
   let frame = 0;
+  let delta = 0;
   let pointer: WheelEvent;
 
-  function clearTarget() {
+  map.on('moveend', () => { target = undefined; });
+  container.addEventListener('pointerdown', () => {
     cancelAnimationFrame(frame);
     frame = 0;
+    delta = 0;
     target = undefined;
-  }
-  map.on('moveend', clearTarget);
-  container.addEventListener('pointerdown', clearTarget);
+  });
   container.addEventListener('wheel', event => {
     const pixels = L.DomEvent.getWheelDelta(event);
     if (!pixels) return;
     event.preventDefault();
     event.stopPropagation();
-    const previous = target ?? map.getZoom();
-    target = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), previous + pixels / 60));
+    delta += pixels / 60;
     pointer = event;
-    if (target === previous || frame) return;
+    if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
-      if (target === undefined) return;
+      const previous = target ?? map.getZoom();
+      const next = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), previous + delta));
+      delta = 0;
+      if (next === previous) return;
+      target = next;
       const offset = map.mouseEventToContainerPoint(pointer).subtract(map.getSize().divideBy(2));
       const anchor = map.project(map.mouseEventToLatLng(pointer), target);
       const center = map.unproject(anchor.subtract(offset), target);

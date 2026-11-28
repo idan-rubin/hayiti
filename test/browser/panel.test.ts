@@ -378,7 +378,10 @@ await test('small wheel movements accumulate in both directions around the point
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const date = '2026-06-14';
     await hostTrip(page, { id: 'zoom', title: 'Harbor walk', start: date, end: date, stops: dayOfStops(date, harbor.slice(0, 2)) });
-    await page.locator('.leaflet-marker-icon').nth(1).waitFor();
+    await page.waitForFunction(() => {
+      const [a, b] = [...document.querySelectorAll('.leaflet-marker-icon')].map(pin => pin.getBoundingClientRect());
+      return a && b && Math.abs(a.y - b.y) > 50;
+    });
     const pins = page.locator('.leaflet-marker-icon');
     const geometry = () => pins.evaluateAll(elements => {
       const [a, b] = elements.map(pin => pin.getBoundingClientRect());
