@@ -682,6 +682,33 @@ await test('a stop chosen on the map while a short sheet is lowered is in view o
   }
 });
 
+await test('a stop chosen on the map while a short sheet is lowered is in view when the window turns into a side panel', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 411, height: 400 }, hasTouch: true });
+    const date = '2026-06-14';
+    await hostTrip(page, { id: 'short', title: 'Short window', start: date, end: date, stops: dayOfStops(date, harbor) });
+    await page.locator('.leaflet-marker-icon').nth(7).waitFor();
+    await lowerSheet(page);
+    await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
+    assert.equal(await page.locator('#stops .activeStop .stopname').textContent(), 'Ferry dock');
+    for (const [width, height] of [[667, 375], [1280, 720]]) {
+      await page.setViewportSize({ width, height });
+      await page.waitForFunction(() => {
+        const name = document.querySelector('#stops .activeStop .stopname')!.getBoundingClientRect();
+        const list = document.querySelector('.listbody')!.getBoundingClientRect(), actions = document.querySelector('.toolbar')!.getBoundingClientRect();
+        return name.top >= Math.max(0, list.top) - 1 && name.bottom <= Math.min(actions.top, list.bottom) + 1;
+      }, null, { timeout: 3000 }).catch(() => assert.fail(`${width}×${height}: the chosen stop is out of sight in the panel`));
+      await page.setViewportSize({ width: 411, height: 400 });
+      assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
+      assert.ok(await headingShown(page), `back from ${width}×${height} the lowered sheet shows the trip name and the date`);
+      await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
 await test('another day or the whole trip chosen in a lowered short sheet opens the raised list from its start', async () => {
   const browser = await chromium.launch();
   try {

@@ -21,7 +21,8 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     dragged = false,
     // In a short window the stylesheet scrolls the whole panel, trip name and days included.
     // Lowered, the sheet has to show those, so the panel is held at its top and its scrolling waits here.
-    whenRaised: (() => void) | null = null;
+    held = false,
+    parked: (() => void) | null = null;
   // The full sheet leaves the bar above it uncovered. The lowest stop is as tall as the caller says the trip's heading is.
   const heights = () => {
     const full = Math.max(240, innerHeight - 64);
@@ -31,22 +32,22 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
   };
   const setHeight = (pixels: number) => document.documentElement.style.setProperty('--sheet', pixels + 'px');
   function rest(next: SheetStop) {
-    const lowered = narrow.matches && next === 'peek',
-      raised = stop === 'peek' && next !== 'peek';
-    if (lowered && stop !== 'peek') {
+    const hold = narrow.matches && next === 'peek';
+    if (hold && !held) {
       const offset = panel.scrollTop;
-      whenRaised = () => {
+      parked = () => {
         panel.scrollTop = offset;
       };
     }
     stop = next;
     document.body.dataset.sheet = next;
     setHeight(heights()[next]);
-    if (lowered || raised) panel.scrollTop = 0;
-    if (raised) {
-      whenRaised?.();
-      whenRaised = null;
+    if (hold || held) panel.scrollTop = 0;
+    if (held && !hold) {
+      parked?.();
+      parked = null;
     }
+    held = hold;
     // A full sheet covers the map, so the keyboard skips the controls and pins behind it.
     behind.inert = narrow.matches && next === 'full';
     handle.setAttribute('aria-expanded', String(next === 'full'));
@@ -127,10 +128,10 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     rest,
     relabel: () => rest(stop),
     get lowered() {
-      return narrow.matches && stop === 'peek';
+      return held;
     },
     scroll(move: () => void) {
-      if (narrow.matches && stop === 'peek') whenRaised = move;
+      if (held) parked = move;
       else move();
     }
   };
