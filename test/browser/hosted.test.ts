@@ -132,8 +132,10 @@ await test('a shared route stays on screen through a temporary failure and clear
     assert.equal(await page.locator('body').getAttribute('data-sheet'), 'half');
     await page.getByRole('status').filter({ hasText: 'Shared route · View only' }).waitFor();
     await page.setViewportSize({ width: 1280, height: 720 });
+    assert.equal(await page.locator('#share').isVisible(), false);
     const wholeTrip = page.locator('#wholeTrip');
     await openMenu(page);
+    await page.locator('#menu #mapStyle').waitFor();
     assert.deepEqual(await page.locator('#menu button:visible').allInnerTexts(), ['Whole trip']);
     assert.equal(await page.locator('#menu .beta-links').isVisible(), false);
     await wholeTrip.click();
@@ -1385,7 +1387,7 @@ await test('the mobile sheet keeps the date reel on one row and the day actions 
           assert.ok(bounds);
           assert.ok(boxes.every(box => box.left >= bounds.x - 1 && box.right <= bounds.x + bounds.width + 1));
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${lang} ${width}px: nothing spills past the window`);
-          assert.equal(await page.locator('.mapcard #mapStyle').count(), 0);
+          assert.equal(await page.locator('nav #mapStyle').count(), 0);
           await openMenu(page);
           assert.equal(await page.locator('#menu #mapStyle').isVisible(), true);
           assert.equal(await overview.innerText(), pressed ? (lang === 'he' ? 'חזרה ליום' : 'Back to the day') : whole);
