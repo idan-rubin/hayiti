@@ -111,6 +111,7 @@ await test('a stop popup shows its edit action above the sheet on short phones',
       await sheetSettled(page);
       assert.ok(Math.abs((await panel.boundingBox())!.height - preview) < 1, 'opening a pin keeps the list in place');
       await page.locator('.leaflet-popup-close-button').tap();
+      await page.locator('.leaflet-popup').waitFor({ state: 'detached' });
       await sheetSettled(page);
       assert.ok(Math.abs((await panel.boundingBox())!.height - preview) < 1, 'closing the pin keeps the list in place');
       await restSheet(page, 'full');
