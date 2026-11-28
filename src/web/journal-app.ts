@@ -820,16 +820,22 @@ function showRow(id: string) {
   if (box.top < top || box.height > bottom - top) scroller.scrollTop += box.top - top;
   else if (box.bottom > bottom) scroller.scrollTop += box.bottom - bottom;
 }
+function showSelected() {
+  const id = selected,
+    list = rows.get(id)?.closest<HTMLElement>('.listbody');
+  if (!list) return;
+  if (getComputedStyle(list).overflowY !== 'visible') showRow(id);
+  else sheet.scroll(() => {
+    if (selected === id) showRow(id);
+  });
+}
+// A window that grows or loses height changes whether the list or the whole panel scrolls, and neither keeps the other's place.
+matchMedia('(max-height: 540px)').addEventListener('change', showSelected);
 function reveal(id: string, target: 'row' | 'pin') {
   selected = id;
   for (const [key, row] of rows) row.classList.toggle('activeStop', key === id);
   if (target === 'row') {
-    const list = rows.get(id)?.closest<HTMLElement>('.listbody');
-    if (!list) return;
-    if (getComputedStyle(list).overflowY !== 'visible') showRow(id);
-    else sheet.scroll(() => {
-      if (selected === id) showRow(id);
-    });
+    showSelected();
     return;
   }
   // On a phone a full sheet covers the map, which is fitted again as the sheet lowers.

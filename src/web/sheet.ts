@@ -31,15 +31,15 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     return { peek: Math.min(full, Math.max(96, peek())), half: Math.ceil(Math.max(innerHeight * .55, day)), full };
   };
   const setHeight = (pixels: number) => document.documentElement.style.setProperty('--sheet', pixels + 'px');
-  function endHold() {
+  function showParked() {
     held = false;
+    delete panel.dataset.held;
     panel.scrollTop = 0;
     parked?.();
-    parked = null;
   }
   function rest(next: SheetStop) {
     const hold = narrow.matches && next === 'peek';
-    if (hold && !held) {
+    if (hold && !held && !parked) {
       const offset = panel.scrollTop;
       parked = () => {
         panel.scrollTop = offset;
@@ -48,9 +48,14 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     stop = next;
     document.body.dataset.sheet = next;
     setHeight(heights()[next]);
-    if (hold) panel.scrollTop = 0;
-    else if (held) endHold();
-    held = hold;
+    if (hold) {
+      held = true;
+      panel.scrollTop = 0;
+      panel.dataset.held = '';
+    } else {
+      if (held) showParked();
+      parked = null;
+    }
     // A full sheet covers the map, so the keyboard skips the controls and pins behind it.
     behind.inert = narrow.matches && next === 'full';
     handle.setAttribute('aria-expanded', String(next === 'full'));
@@ -73,7 +78,8 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     if (!drag.moved) return;
     const { peek, full } = heights();
     panel.dataset.dragging = '';
-    if (held) endHold();
+    // What waited stays parked, for a drag that ends where it began.
+    if (held) showParked();
     setHeight(Math.max(peek, Math.min(full, drag.height + raised)));
   });
   function release() {
@@ -136,8 +142,8 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
       return held;
     },
     scroll(move: () => void) {
-      if (held) parked = move;
-      else move();
+      parked = held ? move : null;
+      if (!held) move();
     }
   };
 }

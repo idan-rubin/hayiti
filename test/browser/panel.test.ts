@@ -701,7 +701,44 @@ await test('a stop chosen on the map while a short sheet is lowered is in view o
   }
 });
 
-await test('a stop chosen on the map while a short sheet is lowered is in view when the window turns into a side panel', async () => {
+const chosenShows = (page: Page) => page.waitForFunction(() => {
+  const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+  const name = box('#stops .activeStop .stopname'), panel = box('#panel'), list = box('.listbody'), actions = box('.toolbar');
+  return name.top >= Math.max(panel.top, list.top) - 1 && name.bottom <= Math.min(panel.bottom, list.bottom, actions.top) + 1;
+}, null, { timeout: 3000 }).then(() => true, () => false);
+
+await test('a stop chosen on the map stays in view when the phone is turned, with the sheet lowered or at rest', async () => {
+  const browser = await chromium.launch();
+  try {
+    // A short window scrolls the whole panel and a tall one only the list, so each turn here changes what scrolls.
+    for (const [upright, turned] of [[[411, 400], [667, 375]], [[411, 400], [1280, 720]], [[390, 844], [844, 390]]]) {
+      for (const lowered of [true, false]) {
+        const page = await browser.newPage({ viewport: { width: upright[0], height: upright[1] }, hasTouch: true });
+        const date = '2026-06-14';
+        await hostTrip(page, { id: 'turn', title: 'Turning', start: date, end: date, stops: dayOfStops(date, harbor) });
+        await page.locator('.leaflet-marker-icon').nth(7).waitFor();
+        if (lowered) await lowerSheet(page);
+        const turn = `${upright.join('×')} ${lowered ? 'lowered' : 'at rest'}, turned to ${turned.join('×')}`;
+        await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
+        assert.equal(await page.locator('#stops .activeStop .stopname').textContent(), 'Ferry dock');
+        await page.setViewportSize({ width: turned[0], height: turned[1] });
+        assert.ok(await chosenShows(page), `${turn}: the chosen stop is in view`);
+        await page.setViewportSize({ width: upright[0], height: upright[1] });
+        if (lowered) {
+          assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
+          assert.ok(await headingShown(page), `${turn} and back: the lowered sheet shows the trip name and the date`);
+          await raiseSheet(page);
+        }
+        assert.ok(await chosenShows(page), `${turn} and back: the chosen stop is in view`);
+        await page.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+await test('a drag that leaves a short sheet lowered keeps the stop it will show when raised', async () => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 411, height: 400 }, hasTouch: true });
@@ -710,19 +747,18 @@ await test('a stop chosen on the map while a short sheet is lowered is in view w
     await page.locator('.leaflet-marker-icon').nth(7).waitFor();
     await lowerSheet(page);
     await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
-    assert.equal(await page.locator('#stops .activeStop .stopname').textContent(), 'Ferry dock');
-    for (const [width, height] of [[667, 375], [1280, 720]]) {
-      await page.setViewportSize({ width, height });
-      await page.waitForFunction(() => {
-        const name = document.querySelector('#stops .activeStop .stopname')!.getBoundingClientRect();
-        const list = document.querySelector('.listbody')!.getBoundingClientRect(), actions = document.querySelector('.toolbar')!.getBoundingClientRect();
-        return name.top >= Math.max(0, list.top) - 1 && name.bottom <= Math.min(actions.top, list.bottom) + 1;
-      }, null, { timeout: 3000 }).catch(() => assert.fail(`${width}×${height}: the chosen stop is out of sight in the panel`));
-      await page.setViewportSize({ width: 411, height: 400 });
-      assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
-      assert.ok(await headingShown(page), `back from ${width}×${height} the lowered sheet shows the trip name and the date`);
-      await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
-    }
+    const handle = page.locator('#sheetHandle'), grip = (await handle.boundingBox())!;
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 - 12, { steps: 4 });
+    await page.mouse.up();
+    await sheetSettled(page);
+    assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
+    assert.ok(await headingShown(page), 'the sheet settles back with the trip name and the date');
+    await handle.click();
+    await page.locator('body[data-sheet="half"]').waitFor();
+    await sheetSettled(page);
+    assert.ok(await chosenShows(page), 'raising the sheet shows the stop chosen before the drag');
   } finally {
     await browser.close();
   }
