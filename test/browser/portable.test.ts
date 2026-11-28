@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { strFromU8, unzipSync } from 'fflate';
 import { chromium, type Page } from 'playwright-core';
 import { readPortableRecord, waitForPortableTrip } from './portable-storage-helpers.ts';
-import { backUpTrip, openMenu, restSheet, toggleWholeTrip } from './journal-controls.ts';
+import { backUpTrip, editMappedStop, openMenu, restSheet, toggleWholeTrip } from './journal-controls.ts';
 
 async function openSampleTrip(page: Page) {
   await page.getByRole('button', { name: 'Try the sample trip' }).click();
@@ -421,7 +421,10 @@ await test('an empty journal opens the sample trip in one step and links each st
 
     await page.locator('.leaflet-marker-icon').first().click();
     assert.equal(await page.locator('#stops .activeStop .stopname').textContent(), 'Café Sonder');
-    await page.getByRole('button', { name: 'Show on map: Anita Gelato' }).click();
+    const evidence = page.locator('#stops .stop').filter({ hasText: 'Anita Gelato' }).locator('.src');
+    const box = (await evidence.boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    assert.equal(await page.locator('#stops .activeStop .stopname').textContent(), 'Anita Gelato');
     await page.locator('.leaflet-popup').filter({ hasText: 'Anita Gelato' }).getByRole('button', { name: 'Edit details' }).click();
     assert.equal(await page.locator('#editForm [name=name]').inputValue(), 'Anita Gelato');
   } finally {
@@ -450,6 +453,51 @@ await test('reordering keeps keyboard focus, and Suggest walking order explains 
     await page.locator('#status').filter({ hasText: 'Add at least two stops' }).waitFor();
     assert.equal(await page.locator('#confirmBox').getAttribute('open'), null);
     assert.deepEqual(dialogs, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+await test('a stop can be dragged several places with a mouse or touch, then moved with an arrow', async () => {
+  const browser = await chromium.launch();
+  try {
+    for (const hasTouch of [false, true]) {
+      const page = await browser.newPage({ hasTouch, viewport: hasTouch ? { width: 390, height: 844 } : { width: 1280, height: 800 } });
+      await page.route('https://**/*', route => route.abort());
+      await page.goto(new URL('../../dist/web/Hayiti.html?lang=en', import.meta.url).href);
+      await openSampleTrip(page);
+      if (hasTouch) {
+        await restSheet(page, 'full');
+        await page.waitForFunction(() => Math.abs(document.getElementById('panel')!.offsetHeight -
+          parseFloat(document.documentElement.style.getPropertyValue('--sheet'))) < 1);
+      }
+      const stops = page.locator('#stops .stop');
+      const handle = stops.first().locator('.stop-grip');
+      const target = stops.nth(2);
+      const start = (await handle.boundingBox())!, end = (await target.boundingBox())!;
+      const x = start.x + start.width / 2, y = start.y + start.height / 2, bottom = end.y + end.height - 4;
+      if (hasTouch) {
+        const input = await page.context().newCDPSession(page);
+        await input.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+        for (let step = 1; step <= 12; step++) {
+          await input.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + (bottom - y) * step / 12 }] });
+        }
+        await page.waitForFunction(() => document.querySelector('#stops .stop:nth-child(3) .stopname')?.textContent === 'Café Sonder');
+        await input.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      } else {
+        await handle.dragTo(target, { targetPosition: { x: end.width / 2, y: end.height - 4 } });
+      }
+      const names = page.locator('#stops .stopname');
+      await names.nth(2).filter({ hasText: 'Café Sonder' }).waitFor();
+      await page.reload();
+      await names.nth(2).filter({ hasText: 'Café Sonder' }).waitFor();
+      assert.deepEqual((await names.allTextContents()).slice(0, 3), ['Anita Gelato', 'Taxi pickup in Neve Tzedek', 'Café Sonder']);
+      if (hasTouch) await restSheet(page, 'full');
+      await page.getByRole('button', { name: 'Move earlier: Café Sonder' }).click();
+      await names.nth(1).filter({ hasText: 'Café Sonder' }).waitFor();
+      assert.equal(await page.locator('.leaflet-popup').count(), 0);
+      await page.close();
+    }
   } finally {
     await browser.close();
   }
@@ -797,7 +845,7 @@ await test('a terrain image that failed on the overview does not keep the note a
   }
 });
 
-await test('on a wide screen the brand sits over the panel, the bar reaches the far edge and the language menu has room for its arrow', async () => {
+await test('the desktop panel stays on the left while the toolbar follows the language', async () => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 2560, height: 900 } });
@@ -812,12 +860,12 @@ await test('on a wide screen the brand sits over the panel, the bar reaches the 
         const edges = await page.evaluate(() => {
           const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
           const brand = box('.brand'), bar = box('header nav'), panel = box('#panel');
-          // The panel and the brand above it start where reading starts. The bar ends at the far edge of the window.
-          return document.documentElement.dir === 'rtl'
-            ? { brand: Math.round(brand.right), panel: Math.round(panel.right), bar: Math.round(bar.left), map: Math.round(box('#map').width) }
-            : { brand: Math.round(brand.left), panel: Math.round(panel.left), bar: Math.round(innerWidth - bar.right), map: Math.round(box('#map').width) };
+          const rtl = document.documentElement.dir === 'rtl';
+          return { panel: panel.left, brand: rtl ? innerWidth - brand.right : brand.left,
+            bar: rtl ? bar.left : innerWidth - bar.right, map: box('#map').width };
         });
-        assert.equal(edges.brand, edges.panel, language + ' at ' + width);
+        assert.equal(edges.panel, 12, language + ' at ' + width);
+        assert.equal(edges.brand, 12, language + ' at ' + width);
         assert.equal(edges.bar, 12, language + ' at ' + width);
         assert.equal(edges.map, width, 'the map fills the window at ' + width);
       }
@@ -870,7 +918,7 @@ await test('the traveler re-times and moves a photo pin, and a new home base dro
     });
     await page.goto(new URL('../../dist/web/Hayiti.html?lang=en', import.meta.url).href);
     const saved = async () => (await readPortableRecord(page))!.trips[0];
-    const openPin = () => page.getByRole('button', { name: 'Camera pin', exact: true }).first().click();
+    const openPin = () => editMappedStop(page, 'Camera pin');
     const save = async (dialog: string, form: string) => {
       await page.locator(form + ' .primary').click();
       await page.locator(dialog).waitFor({ state: 'hidden' });
@@ -1144,7 +1192,7 @@ await test('a photo-backed visit the traveler moves to another day is marked as 
       stops: [{ id: 'visit', date: first, name: 'Harbour café', xy: [32.08, 34.78], sources: ['card', 'photo'], refs: ['charge', 'asset-1'], count: 1 }]
     });
     await page.goto(new URL('../../dist/web/Hayiti.html?lang=en', import.meta.url).href);
-    await page.getByRole('button', { name: 'Harbour café', exact: true }).first().click();
+    await editMappedStop(page, 'Harbour café');
     await page.locator('#editForm [name=date]').fill(second);
     await page.locator('#editForm .primary').click();
     await page.locator('#edit').waitFor({ state: 'hidden' });
@@ -1217,7 +1265,7 @@ await test('a traveler can mark a map pin approximate and later confirm its loca
     await page.locator('#file').setInputFiles({ name: 'weekend.json', mimeType: 'application/json',
       buffer: Buffer.from(JSON.stringify({ format: 'hayiti/1', trip })) });
     await page.getByRole('button', { name: 'Load trip' }).click();
-    const open = () => page.getByRole('button', { name: 'Market hall', exact: true }).click();
+    const open = () => editMappedStop(page, 'Market hall');
     const save = async () => {
       await page.locator('#editForm .primary').click();
       await page.locator('#edit').waitFor({ state: 'hidden' });
@@ -1403,7 +1451,7 @@ await test('mapped visits keep details collapsed until the last visit is removed
     const isOpen = () => page.locator('#other').evaluate(element => (element as HTMLDetailsElement).open);
     await page.locator('#otherSummary').waitFor();
     assert.equal(await isOpen(), false);
-    await page.getByRole('button', { name: 'Park', exact: true }).click();
+    await editMappedStop(page, 'Park');
     await page.locator('#removeStop').click();
     await page.locator('#confirmYes').click();
     await page.locator('#edit').waitFor({ state: 'hidden' });

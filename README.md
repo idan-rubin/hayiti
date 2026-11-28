@@ -73,12 +73,12 @@ The orange dashed line shows the taxi ride. Taxi pins show approximate locations
 
 ## Reading a day
 
-- **Numbered stops** appear in order, each with a pin. A solid green line shows an estimated walk. An orange dashed line shows a taxi ride. A green dashed line shows the order when the route between stops is unknown.
+- **Numbered stops** appear in order, each with a pin. Select a stop in the list to open its pin details. A solid green line shows an estimated walk. An orange dashed line shows a taxi ride. A green dashed line shows the order when the route between stops is unknown.
 - **More about this day** holds what could not be placed: places without a pin, visits to confirm and remote purchases.
 - **The date reel** under the trip's name turns from day to day, like the wheel of a slot machine. The arrow beside it lists every date and what is recorded for it.
 - **Whole trip**, in the menu at the end of the bar, shows every day on one map, each day's pins and route in its own color. The same menu row leads back to the day.
 - **Map style** in the menu switches between streets, satellite imagery and terrain.
-- **Edit anything.** Move a stop up or down, fix a time or an address, or mark a location as approximate.
+- **Edit anything.** Drag a stop by its dotted handle on a phone or computer, or use the up and down arrows. Choose **Edit details** in the pin popup to fix a time or an address or mark a location as approximate.
 
 On a phone, the day's visits sit in a sheet over the map. Tap its handle to raise the list, and again to lower it. Raised, the sheet also shows the trip's dates. Lowered, it leaves the map the screen and the legend appears. Held sideways, the phone shows the day in a panel beside the map.
 

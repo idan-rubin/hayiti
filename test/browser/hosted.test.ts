@@ -9,7 +9,7 @@ import { journalSchemaVersion } from '../../src/domain/journal-schema.ts';
 import { loadState, storeState } from '../../src/server/storage.ts';
 import { MemoryBucket } from '../memory-bucket.ts';
 import { guestTitles, patchGuestRecord, readGuestRecord, refuseGuestWrites } from './guest-storage-helpers.ts';
-import { backUpTrip, openMenu, toggleWholeTrip } from './journal-controls.ts';
+import { backUpTrip, editMappedStop, openMenu, toggleWholeTrip } from './journal-controls.ts';
 
 // An https origin keeps the page a secure context, as the hosted journal is.
 const origin = 'https://hayiti.test';
@@ -1086,7 +1086,7 @@ await test('saving an address without a pin finds the pin, and says so when it c
     assert.equal(await page.locator('.leaflet-marker-icon').count(), 1);
 
     // An address that is already saved is not looked up again.
-    await page.getByRole('button', { name: 'Dinner', exact: true }).click();
+    await editMappedStop(page, 'Dinner');
     await page.locator('#editForm [name=notes]').fill('Window table');
     await page.locator('#editForm .form-actions .primary').click();
     await page.locator('#edit').waitFor({ state: 'hidden' });
@@ -1239,7 +1239,7 @@ await test('stops saved elsewhere appear when the traveler returns to the tab', 
     const read = page.waitForResponse(response => response.url().endsWith('/api/journal'));
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
     await read;
-    await page.getByRole('button', { name: 'Added in ChatGPT', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Show on map: Added in ChatGPT', exact: true }).waitFor();
   } finally {
     await browser.close();
   }
@@ -2202,7 +2202,7 @@ await test('approximating a hosted pin requires an area point and clears its str
         await route.fulfill({ status: response.status, contentType: 'application/json', body: await response.text() });
       });
       await page.goto(origin + '/journal.html?lang=' + lang);
-      await page.getByRole('button', { name: 'Canal Street Shop', exact: true }).click();
+      await editMappedStop(page, 'Canal Street Shop');
       await page.locator('#editForm input[name=approx]').check();
       await page.locator('#editForm .primary').click();
       await page.locator('#edit .form-error').filter({ hasText: lang === 'en' ? 'Choose a different point' : 'יש לבחור נקודה אחרת' }).waitFor();
@@ -2218,7 +2218,7 @@ await test('approximating a hosted pin requires an area point and clears its str
       assert.deepEqual(saved.trips[0].stops[0].xy, [51.923, 4.482]);
       assert.deepEqual(saved.trips[0].edges, []);
       await page.reload();
-      await page.getByRole('button', { name: 'Canal Street Shop', exact: true }).click();
+      await editMappedStop(page, 'Canal Street Shop');
       assert.equal(await page.locator('#editForm input[name=address]').inputValue(), '');
       assert.equal(await page.locator('#editForm input[name=approx]').isChecked(), true);
       await page.close();
@@ -2247,7 +2247,7 @@ await test('editing private notes on an already approximate hosted stop keeps it
       await route.fulfill({ status: response.status, contentType: 'application/json', body: await response.text() });
     });
     await page.goto(origin + '/journal.html?lang=en');
-    await page.getByRole('button', { name: 'Carmel Market', exact: true }).click();
+    await editMappedStop(page, 'Carmel Market');
     await page.locator('#editForm textarea[name=notes]').fill('Lunch with friends');
     await page.locator('#editForm .primary').click();
     await page.locator('#edit').waitFor({ state: 'hidden' });

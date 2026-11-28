@@ -1,4 +1,5 @@
 import { element as $, errorMessage } from './dom.ts';
+import Sortable from 'sortablejs';
 import { member, reportSources, statesBySource, validOutcome, isRecord } from '../domain/core.ts';
 import type { Trip, Stop, Source, CheckStatus, Edge, GooglePin, GooglePinResult, Point, MergeResult } from '../domain/core.ts';
 import type { ImportResult } from '../domain/importers.ts';
@@ -125,6 +126,7 @@ const map = L.map('map', {
   zoomDelta: .5,
   maxZoom: 19
 }).setView([30, 15], 2);
+map.zoomControl.setPosition('bottomright');
 enableWheelZoom(map);
 // Taxi dashes sit above walking paths (400) and below stop markers (600), in either travel order.
 map.createPane('taxiRoutes').style.zIndex = '410';
@@ -184,11 +186,7 @@ function coveredEdges() {
   const foot = Math.max(above(document.querySelector('.legend')), above(map.getContainer().querySelector('.leaflet-control-attribution')));
   if (sheet.narrow) return { top, left: 0, right: 0, bottom: Math.max(sheet.cover, foot) };
   const panel = $('panel').getBoundingClientRect();
-  if (!panel.width) return { top, left: 0, right: 0, bottom: foot };
-  // The panel follows the reading direction, so it covers the left edge in English and the right edge in Hebrew.
-  const onRight = panel.left - box.left > box.right - panel.right;
-  const beside = (onRight ? box.right - panel.left : panel.right - box.left) + 6;
-  return { top, left: onRight ? 0 : beside, right: onRight ? beside : 0, bottom: foot };
+  return { top, left: panel.width ? panel.right - box.left + 6 : 0, right: 0, bottom: foot };
 }
 // Leaflet keeps the pairs a popup was bound with and reads them when it opens. Every popup shares these two,
 // and a fit updates them in place, so a popup bound before a resize or a rotation keeps clear of the panel after it.
@@ -517,19 +515,11 @@ function appendStopRow(s: Stop, i: number, list: Stop[], number: string) {
   const li = dom('li', undefined, 'stop');
   li.classList.toggle('activeStop', selected === s.id);
   rows.set(s.id, li);
-  const locate = button(number, () => reveal(s.id, 'pin'));
-  locate.className = 'num';
-  locate.setAttribute('aria-label', ui('Show on map: ', 'הצגה במפה: ') + name);
-  li.append(locate);
+  li.append(dom('span', number, 'num'));
   const col = dom('div');
-  const open = sharedRoute ? dom('strong', name) : button(name, () => {
-    if (s.id === 'base') {
-      openSettings(false);
-      return;
-    }
-    openStop(s);
-  });
+  const open = button(name, () => reveal(s.id, 'pin'));
   open.className = 'stopname';
+  open.setAttribute('aria-label', ui('Show on map: ', 'הצגה במפה: ') + name);
   col.append(open);
   const hints = [s.time, s.address, s.band, s.approx ? t('מיקום משוער') : ''].filter(Boolean);
   col.append(dom('div', hints.join(' · '), 'meta'));
@@ -537,11 +527,19 @@ function appendStopRow(s: Stop, i: number, list: Stop[], number: string) {
   if (evidence) col.append(dom('span', evidence, 'src'));
   if (s.notes) col.append(dom('div', s.notes, 'meta'));
   const actions = dom('div', undefined, 'tools');
-  if (s.kind !== 'origin') {
+  if (!sharedRoute && s.kind !== 'origin') {
+    if (i + 1 < list.length || (i > 0 && list[i - 1].kind !== 'origin')) {
+      li.classList.add('reorderable');
+      const grip = dom('span', '⠿', 'stop-grip');
+      grip.title = ui('Drag to reorder', 'גרירה לשינוי הסדר');
+      grip.setAttribute('aria-hidden', 'true');
+      actions.append(grip);
+    }
     for (const [sign, delta] of [['↑', -1], ['↓', 1]] as const) {
-      const b = button(sign, () => void move(s, delta));
+      const neighbor = list[i + delta];
+      const b = button(sign, () => { if (neighbor) void move(s.id, neighbor.id, delta); });
       b.setAttribute('aria-label', delta < 0 ? t('הקדמת ') + name : t('דחיית ') + name);
-      b.disabled = !list[i + delta] || list[i + delta].kind === 'origin';
+      b.disabled = !neighbor || neighbor.kind === 'origin';
       actions.append(b);
     }
   }
@@ -849,9 +847,12 @@ function reveal(id: string, target: 'row' | 'pin') {
     return;
   }
   // On a phone a full sheet covers the map, which is fitted again as the sheet lowers.
-  popupFor = id;
-  map.closePopup();
-  viewList(false);
+  if (sheet.narrow && sheet.stop === 'full') {
+    popupFor = id;
+    viewList(false);
+  } else {
+    marks.get(id)?.openPopup();
+  }
 }
 // Temporary memory edits need a backup before leaving this document.
 const tabOnly = () => session.mode === 'memory' || (session.mode === 'guest' && session.guestPersistence === 'memory');
@@ -1145,22 +1146,40 @@ $('trips').onchange = () => {
   endHint();
   renderSelection();
 };
-async function move(s: Stop, delta: number) {
+async function move(id: string, destination: string, arrow?: number) {
   const { trip, day } = session;
-  if (!trip) return;
+  if (!trip || sharedRoute) return;
+  const list = routeStops(trip, day, t('נקודת מוצא')).filter(s => s.id !== 'base');
+  const from = list.findIndex(s => s.id === id), to = list.findIndex(s => s.id === destination);
+  if (from < 0 || to < 0 || from === to || list[from].kind === 'origin' || list[to].kind === 'origin') return;
   const moved = await change(() => {
-    const list = routeStops(trip, day, t('נקודת מוצא')).filter(x => x.id !== 'base'),
-      i = list.findIndex(x => x.id === s.id);
-    if (!list[i + delta] || list[i + delta].kind === 'origin') return;
-    [list[i], list[i + delta]] = [list[i + delta], list[i]];
+    const [stop] = list.splice(from, 1);
+    list.splice(to, 0, stop);
     list.forEach((x, j) => x.rank = j);
     delete trip.dayNotes[day];
   });
-  if (!moved) return;
+  if (!moved || !arrow) return;
   // The list was redrawn. Return focus to the same arrow, or its neighbor at the end of the list.
-  const arrows = [...rows.get(s.id)?.querySelectorAll<HTMLButtonElement>('.tools button') ?? []];
-  (arrows[delta < 0 ? 0 : 1]?.disabled ? arrows[delta < 0 ? 1 : 0] : arrows[delta < 0 ? 0 : 1])?.focus();
+  const arrows = [...rows.get(id)?.querySelectorAll<HTMLButtonElement>('.tools button') ?? []];
+  const same = arrows[arrow < 0 ? 0 : 1];
+  (same?.disabled ? arrows[arrow < 0 ? 1 : 0] : same)?.focus();
 }
+if (!sharedRoute) Sortable.create($('stops'), {
+  handle: '.stop-grip',
+  draggable: '.reorderable',
+  direction: 'vertical',
+  fallbackTolerance: 4,
+  onMove: event => event.related === $('stops') || event.related.classList.contains('reorderable'),
+  onEnd({ item, oldIndex, newIndex }) {
+    if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return;
+    const order = [...rows];
+    const source = order[oldIndex], destination = order[newIndex];
+    if (source?.[1] !== item || !destination) return;
+    // The journal redraws from the saved order after a successful move or a conflict.
+    $('stops').insertBefore(item, order[oldIndex + 1]?.[1] ?? null);
+    void move(source[0], destination[0]);
+  }
+});
 $('organize').onclick = async () => {
   const { trip, day } = session;
   if (!trip) return;
@@ -1933,10 +1952,6 @@ $('edit').addEventListener('cancel', () => {
   photoBusy = false;
 });
 function localizeControls() {
-  // The panel takes the side where reading starts, so the zoom buttons and the map credit take the other one.
-  const corner = language === 'he' ? 'bottomleft' : 'bottomright';
-  map.attributionControl.setPosition(corner);
-  map.zoomControl.setPosition(corner);
   sheet.relabel();
   for (const [direction, hebrew, english] of [['in', 'התקרבות', 'Zoom in'], ['out', 'התרחקות', 'Zoom out']]) {
     const zoom = map.getContainer().querySelector<HTMLElement>('.leaflet-control-zoom-' + direction);
