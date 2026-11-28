@@ -31,6 +31,12 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     return { peek: Math.min(full, Math.max(96, peek())), half: Math.ceil(Math.max(innerHeight * .55, day)), full };
   };
   const setHeight = (pixels: number) => document.documentElement.style.setProperty('--sheet', pixels + 'px');
+  function endHold() {
+    held = false;
+    panel.scrollTop = 0;
+    parked?.();
+    parked = null;
+  }
   function rest(next: SheetStop) {
     const hold = narrow.matches && next === 'peek';
     if (hold && !held) {
@@ -42,11 +48,8 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     stop = next;
     document.body.dataset.sheet = next;
     setHeight(heights()[next]);
-    if (hold || held) panel.scrollTop = 0;
-    if (held && !hold) {
-      parked?.();
-      parked = null;
-    }
+    if (hold) panel.scrollTop = 0;
+    else if (held) endHold();
     held = hold;
     // A full sheet covers the map, so the keyboard skips the controls and pins behind it.
     behind.inert = narrow.matches && next === 'full';
@@ -70,6 +73,7 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     if (!drag.moved) return;
     const { peek, full } = heights();
     panel.dataset.dragging = '';
+    if (held) endHold();
     setHeight(Math.max(peek, Math.min(full, drag.height + raised)));
   });
   function release() {
@@ -96,6 +100,7 @@ export function createSheet(panel: HTMLElement, handle: HTMLButtonElement, behin
     if (!narrow.matches || stop !== 'peek' || !(target instanceof HTMLElement) || target === handle) return;
     // Measured from the top of the sheet, so the answer is the same while the sheet is still on its way down.
     if (target.getBoundingClientRect().bottom - panel.getBoundingClientRect().top <= heights().peek) return;
+    if (held) parked = () => target.scrollIntoView({ block: 'nearest' });
     settle('half');
     // The list has room for the row once the sheet has finished rising.
     setTimeout(() => {

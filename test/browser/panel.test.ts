@@ -380,11 +380,10 @@ await test('tabbing past the days of a lowered sheet raises it, so focus is neve
     for (const [width, height] of [[390, 844], [411, 400]]) {
       const page = await browser.newPage({ viewport: { width, height }, hasTouch: true });
       const date = '2026-06-14';
-      await hostTrip(page, {
-        id: 'tab', title: 'Tabbing', start: date, end: date,
-        stops: [{ id: 'a', name: 'Market', date, xy: [51.92, 4.48] }, { id: 'b', name: 'Museum', date, xy: [51.925, 4.47] }]
-      });
-      await page.locator('.leaflet-marker-icon').nth(1).waitFor();
+      await hostTrip(page, { id: 'tab', title: 'Tabbing', start: date, end: date, stops: dayOfStops(date, harbor) });
+      await page.locator('.leaflet-marker-icon').nth(7).waitFor();
+      await page.locator('#sheetHandle').focus();
+      await page.locator('#panel').evaluate(element => { element.scrollTop = 200; });
       await page.locator('#sheetHandle').press('ArrowDown');
       assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
       // The days still show in the lowered sheet, and reaching them leaves it lowered.
@@ -392,6 +391,11 @@ await test('tabbing past the days of a lowered sheet raises it, so focus is neve
       assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
       await page.keyboard.press('Tab');
       await page.locator('body[data-sheet="half"]').waitFor();
+      const seen = await page.evaluate(() => {
+        const focused = document.activeElement!.getBoundingClientRect(), sheet = document.getElementById('panel')!.getBoundingClientRect();
+        return focused.height > 0 && focused.top >= sheet.top && focused.top < sheet.bottom;
+      });
+      assert.ok(seen, `${width}×${height}: focus is in the sheet as soon as it starts to rise`);
       await page.waitForFunction(() => {
         const focused = document.activeElement!.getBoundingClientRect();
         return document.activeElement !== document.body && focused.height > 0 && focused.top >= 0 && focused.bottom <= innerHeight;
@@ -510,6 +514,11 @@ await test('the resting sheet keeps one height as the days turn and shows the li
       await sheetSettled(page);
       assert.equal(await page.locator('#reviewDay').innerText(), lang === 'en' ? 'More about this day (1)' : 'מידע נוסף לאותו יום (1)');
       assert.equal(await page.locator('#reviewDay').isVisible(), true, `${lang}: the resting sheet offers the rest of the day's records`);
+      const underFinger = await page.evaluate(() => {
+        const walk = document.querySelector('#dayStats > summary')!.getBoundingClientRect();
+        return document.elementFromPoint(walk.left + walk.width / 2, walk.bottom - 1)!.closest('#dayStats, #reviewDay')!.id;
+      });
+      assert.equal(underFinger, 'dayStats', `${lang}: the foot of the walking summary opens the walk, not the shortcut under it`);
       const note = page.locator('#dayNote'), firstVisit = visits.nth(1);
       const noteLeads = () => note.evaluate(element =>
         element.getBoundingClientRect().bottom <= document.getElementById('stops')!.getBoundingClientRect().top + 1);
@@ -650,8 +659,18 @@ await test('lowered in a short, narrow window the sheet shows the trip and its d
         assert.ok(await headingShown(page), `${width}×${height} ${lang}: the trip name and the date show in the lowered sheet`);
         await page.locator('#dayReel').click({ trial: true, timeout: 2000 });
         await page.locator('#tripDate').click({ trial: true, timeout: 2000 });
-        await raiseSheet(page);
+        const grip = (await page.locator('#sheetHandle').boundingBox())!;
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 - 100, { steps: 6 });
+        assert.equal(await panel.evaluate(element => element.scrollTop), scrolled, `${width}×${height} ${lang}: a drag upward shows the stops where they were`);
+        await page.mouse.up();
+        await page.locator('body[data-sheet="half"]').waitFor();
+        await sheetSettled(page);
         assert.equal(await panel.evaluate(element => element.scrollTop), scrolled, `${width}×${height} ${lang}: the stops are where they were`);
+        await lowerSheet(page);
+        await raiseSheet(page);
+        assert.equal(await panel.evaluate(element => element.scrollTop), scrolled, `${width}×${height} ${lang}: the keys return to the same stops`);
       }
       await page.close();
     }

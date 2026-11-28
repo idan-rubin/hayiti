@@ -557,7 +557,7 @@ label input, label textarea, label select { width: 100%; font-size: var(--body) 
   body:not(.trip-overview) .listhead { display: none }
   #statStops { display: inline }
   .daybar { padding-block-end: 8px }
-  .day-summary { align-items: center; padding-block: 7px 5px }
+  .day-summary { align-items: center; row-gap: 8px; padding-block: 7px 5px }
   #reviewDay { position: relative; display: block; min-height: 1.75rem; padding: .1rem .55rem; font-size: var(--small) }
   #reviewDay::after { content: ''; position: absolute; inset: -8px 0 }
   .toolbar { padding-block: 6px }
@@ -615,8 +615,8 @@ label input, label textarea, label select { width: 100%; font-size: var(--body) 
 @media (max-width: 559px) and (max-height: 540px) {
   main { scroll-padding-block-start: 1.5rem }
   #sheetHandle { position: sticky; inset-block-start: 0; z-index: 2; background: var(--paper) }
-  body[data-sheet="peek"] main { overflow: hidden; overflow: clip }
-  body[data-sheet="peek"] .toolbar { position: static }
+  body[data-sheet="peek"] main:not([data-dragging]) { overflow: hidden; overflow: clip }
+  body[data-sheet="peek"] main:not([data-dragging]) .toolbar { position: static }
 }
 @media (min-width: 560px) and (max-height: 540px) {
   :root { --edge: 8px; --panel: min(400px, 48vw) }
