@@ -349,18 +349,7 @@ await test('a phone held sideways shows the panel beside the map, with the route
           return beside && box.top >= bar.bottom && box.bottom <= innerHeight;
         });
       });
-      // With so little height the legend is put away, and the map style shares the bar's row without touching it.
       assert.equal(await page.locator('.legend').isVisible(), false);
-      const style = (await page.locator('#mapStyle').boundingBox())!;
-      const bar = await page.locator('.brand, header nav > *').evaluateAll(parts => parts.filter(part => part.checkVisibility()).map(part => {
-        const { left, right, top, bottom } = part.getBoundingClientRect();
-        return { left, right, top, bottom };
-      }));
-      assert.ok(bar.length >= 4);
-      for (const part of bar) {
-        assert.ok(style.y < part.bottom && part.top < style.y + style.height, `${lang}: the map style is in the bar's row`);
-        assert.ok(style.x >= part.right || style.x + style.width <= part.left, `${lang}: the map style is clear of the bar`);
-      }
       // The panel scrolls as a whole: the last stop comes into view above the day's actions, which stay at its foot.
       const last = page.locator('#stops .stopname').last();
       await last.scrollIntoViewIfNeeded();
@@ -383,7 +372,7 @@ await test('a phone held sideways shows the panel beside the map, with the route
   }
 });
 
-await test('the buttons of the bar never cover the map style, at any width or in either language', async () => {
+await test('the map style sits next to Share in the header and moves into the menu over a sheet, in either language', async () => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -392,26 +381,25 @@ await test('the buttons of the bar never cover the map style, at any width or in
     await page.locator('#login').waitFor();
     for (const lang of ['en', 'he']) {
       await page.locator('#languageSwitch').selectOption(lang);
-      assert.equal(await page.locator('header nav > *').evaluateAll(parts => parts.filter(part => part.checkVisibility()).length), 4);
       for (const height of [800, 390]) {
         for (const width of [560, 667, 821, 844, 900, 932, 1000, 1001, 1100, 1280]) {
           await page.setViewportSize({ width, height });
           if (await page.locator('#sheetHandle').isVisible()) {
             await page.locator('#menu #mapStyle').waitFor({ state: 'attached' });
-            assert.equal(await page.locator('.mapcard #mapStyle').count(), 0, `${lang} ${width}x${height}: no map style on the map`);
+            assert.equal(await page.locator('nav #mapStyle').count(), 0);
             continue;
           }
-          await page.locator('.mapcard #mapStyle').waitFor();
+          await page.locator('nav #mapStyle').waitFor();
           const style = (await page.locator('#mapStyle').boundingBox())!;
-          const parts = await page.locator('.brand, header nav > *').evaluateAll(elements => elements.filter(element => element.checkVisibility()).map(element => {
-            const { left, right, top, bottom } = element.getBoundingClientRect();
-            return { id: element.id || element.className, left, right, top, bottom };
-          }));
-          for (const part of parts) {
-            const apart = style.x >= part.right || style.x + style.width <= part.left || style.y >= part.bottom || style.y + style.height <= part.top;
-            assert.ok(apart, `${lang} ${width}x${height}: the map style is clear of ${part.id}`);
-          }
-          assert.ok(style.x >= 0 && style.x + style.width <= width, `${lang} ${width}x${height}: the map style is on screen`);
+          const share = (await page.locator('#share').boundingBox())!;
+          const brand = (await page.locator('.brand').boundingBox())!;
+          const gap = await page.locator('header nav').evaluate(nav => parseFloat(getComputedStyle(nav).columnGap));
+          const distance = lang === 'he' ? style.x - (share.x + share.width) : share.x - (style.x + style.width);
+          const size = `${lang} ${width}x${height}`;
+          assert.ok(Math.abs(distance - gap) < 1, `${size}: the map style is one toolbar gap from Share`);
+          assert.equal(style.y, share.y, size);
+          assert.equal(style.height, share.height, size);
+          assert.ok(lang === 'he' ? style.x + style.width <= brand.x : brand.x + brand.width <= style.x, `${size}: the brand is clear`);
         }
       }
     }
@@ -612,7 +600,7 @@ await test('over a sheet the map style is in the menu and the legend shows only 
     await hostTrip(page, { id: 'band', title: 'Harbor day', start: date, end: date, stops: dayOfStops(date, harbor.slice(0, 4)) });
     await page.locator('.leaflet-marker-icon').nth(3).waitFor();
     await sheetSettled(page);
-    assert.equal(await page.locator('.mapcard #mapStyle').count(), 0);
+    assert.equal(await page.locator('nav #mapStyle').count(), 0);
     assert.equal(await page.locator('.legend').isVisible(), false);
     await page.waitForFunction(() => {
       const bar = document.querySelector('header nav')!.getBoundingClientRect();
@@ -637,7 +625,7 @@ await test('over a sheet the map style is in the menu and the legend shows only 
     await openMenu(page);
     await style.focus();
     await page.setViewportSize({ width: 844, height: 390 });
-    await waitForVisibleFocus(page, '.mapcard #mapStyle');
+    await waitForVisibleFocus(page, 'nav #mapStyle');
     assert.equal(await page.locator('#menu').isVisible(), false);
     await page.setViewportSize({ width: 390, height: 664 });
     await waitForVisibleFocus(page, '#menuButton');

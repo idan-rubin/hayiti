@@ -1068,7 +1068,7 @@ await test('the map controls leave pins and an opened popup uncovered, and a Goo
     });
     await page.goto(new URL('../../dist/web/Hayiti.html?lang=en', import.meta.url).href);
     const covered = (selector: string) => page.evaluate(target => {
-      const controls = document.querySelector('.map-controls')!.getBoundingClientRect();
+      const controls = document.querySelector('header nav')!.getBoundingClientRect();
       return [...document.querySelectorAll(target)].filter(element => {
         const box = element.getBoundingClientRect();
         return box.width > 0 && box.left < controls.right && box.right > controls.left && box.top < controls.bottom && box.bottom > controls.top;

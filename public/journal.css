@@ -152,18 +152,6 @@ summary { cursor: pointer }
   left: calc(var(--cover-left) + 3rem); right: calc(var(--cover-right) + 3rem);
   text-align: center; color: var(--muted); font-size: var(--small); pointer-events: none;
 }
-.map-controls {
-  position: absolute; z-index: 500;
-  inset-block-start: var(--edge); inset-inline-start: calc(var(--panel) + var(--edge) * 2);
-  display: flex; align-items: center; gap: 6px;
-}
-.map-style { display: block; margin: 0 }
-.map-style-label { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden }
-.map-style select {
-  width: auto; min-height: var(--bar); padding: .4rem .8rem;
-  border-color: transparent; border-radius: var(--pill); box-shadow: var(--shadow);
-  color: var(--pine); font-size: var(--body); font-weight: 560; cursor: pointer;
-}
 .legend {
   position: absolute; z-index: 500;
   inset-block-end: var(--edge); inset-inline-start: calc(var(--panel) + var(--edge) * 2);
@@ -225,7 +213,10 @@ nav { pointer-events: none }
 .brand-signature { display: block; width: auto; height: 1.3rem }
 nav { justify-content: flex-end; gap: 6px }
 #share svg { display: none }
-nav > * { min-height: var(--bar); border-color: transparent; border-radius: var(--pill); box-shadow: var(--shadow) }
+nav :is(button, a, select) { min-height: var(--bar); border-color: transparent; border-radius: var(--pill); box-shadow: var(--shadow) }
+nav .map-style-label { display: none }
+.map-style { margin: 0 }
+.map-style select { width: auto; padding: .4rem .8rem; color: var(--pine); font-weight: 560; cursor: pointer }
 nav a { display: inline-flex; align-items: center }
 nav .icon { width: var(--bar) }
 .header-short { display: none }
@@ -244,13 +235,12 @@ nav .icon { width: var(--bar) }
 /* Each row of the menu is tall enough for a fingertip. */
 #menu button { width: 100%; min-height: 2.75rem; border-color: transparent; background: transparent; text-align: start }
 #menu button:hover { background: var(--wash) }
-#menu .map-controls { position: static; display: block; margin-block-end: 2px; padding-block-end: 4px; border-block-end: 1px solid var(--line) }
 #menu .map-style {
   display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px;
   min-height: 2.75rem; padding-inline: .8rem 2px; color: var(--pine); font-size: var(--body); font-weight: 560;
+  margin-block-end: 2px; padding-block-end: 4px; border-block-end: 1px solid var(--line);
 }
-#menu .map-style-label { position: static; width: auto; height: auto; clip-path: none; overflow: visible }
-#menu .map-style select { min-height: 2.25rem; border-color: var(--line); border-radius: var(--radius-s); box-shadow: none }
+#menu .map-style select { min-height: 2.25rem }
 .beta-links {
   display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; padding: .55rem .8rem .3rem;
   border-top: 1px solid var(--line); color: var(--muted); font-size: var(--small);
@@ -470,9 +460,9 @@ body.no-trip :is(#add, #organize, #settings, .legend, .listhead, .day-summary) {
 body.no-trip main { inset-block-end: auto; max-height: calc(100% - var(--edge) * 3 - var(--bar)) }
 .trip-overview :is(#add, #organize, .day-summary) { display: none }
 body.route-copy :is(#export, .top .actions, .toolbar, .stop .tools) { display: none }
-body.hosted-view header nav > :not(#languageSwitch, #menuButton), body.hosted-view :is(#export, .beta-links, #other) { display: none }
+body.hosted-view :is(#share, #login, #export, .beta-links, #other) { display: none }
 body.hosted-view:not(.route-ready) #menuButton { display: none }
-body.hosted-view #menu .map-controls { margin: 0; padding: 0; border: 0 }
+body.hosted-view #menu .map-style { margin: 0; padding-block-end: 0; border: 0 }
 body.hosted-view:not(.route-ready) main > :not(#status, #routeGone) { display: none }
 body.hosted-view:not(.route-ready) #status { display: block; margin: 0; padding: 16px; font-size: var(--lead); text-align: center }
 body.hosted-view:not(.route-ready):has(#routeGone:not([hidden])) #status { display: none }
@@ -549,14 +539,10 @@ label input, label textarea, label select { width: 100%; font-size: var(--body) 
 #hostedList li span { flex: 1 1 100% }
 #hostedSignIn { display: inline-block; padding: 9px 14px; border: 1px solid var(--pine); border-radius: var(--radius-s); font-weight: 560 }
 
-/*
- * Up to this width the bar's buttons take their short forms: Share is drawn as its symbol and sign-in loses its second half.
- * That keeps the bar on one row on a phone, and on a small window it keeps the buttons off the map style beside the panel.
- */
 @media (max-width: 1000px) {
   header { gap: 6px }
   nav { flex: none; flex-wrap: nowrap; gap: 4px }
-  nav > * { padding-inline: .6rem }
+  nav :is(button, a, select) { padding-inline: .6rem }
   .brand { flex: 0 1 auto; min-width: 0; padding-inline: .6rem }
   .brand-signature { width: clamp(2.6rem, 22vw, 5.4rem); height: auto }
   #languageSwitch { padding: .4rem 1.5rem .4rem .6rem; background-position: right .5rem center }
@@ -635,10 +621,6 @@ label input, label textarea, label select { width: 100%; font-size: var(--body) 
 @media (min-width: 560px) and (max-height: 540px) {
   :root { --edge: 8px; --panel: min(400px, 48vw) }
   .top { padding-block-start: 10px }
-}
-/* Beside a narrower panel the map style has no room next to the bar's buttons, so it moves up beside the brand. */
-@media (min-width: 560px) and (max-width: 820px) and (max-height: 540px) {
-  .map-controls { inset-block-start: var(--edge); inset-inline: calc(var(--edge) + 6.6rem + 8px) auto }
 }
 /* A narrow panel tightens the day's actions, and in the narrowest Sources and import takes its short name. */
 @container panel (max-width: 379px) {

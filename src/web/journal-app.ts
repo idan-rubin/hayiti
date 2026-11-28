@@ -164,18 +164,17 @@ new ResizeObserver(() => {
   fitPopupPadding();
   if (openPopup) updatePopup(openPopup);
 }).observe($('status'), { box: 'border-box' });
-const mapSection = map.getContainer().parentElement!,
-  mapControls = document.querySelector<HTMLElement>('.map-controls')!;
+const mapStyleLabel = $('mapStyle').closest('label')!;
 const sheetWidth = matchMedia(sheetLayout);
 function placeMapStyle() {
   const menu = $('menu'), picker = $('mapStyle');
   const focused = document.activeElement === picker;
   if (sheetWidth.matches) {
-    menu.insertBefore(mapControls, $('export'));
+    $('export').before(mapStyleLabel);
     if (focused) (menu.matches(':popover-open') ? picker : $('menuButton')).focus({ preventScroll: true });
   } else {
     if (focused && menu.matches(':popover-open')) menu.hidePopover();
-    mapSection.insertBefore(mapControls, mapSection.querySelector('.legend'));
+    $('share').before(mapStyleLabel);
     if (focused) picker.focus({ preventScroll: true });
   }
 }
@@ -185,14 +184,11 @@ sheetWidth.addEventListener('change', () => {
   fitRoute();
   keepInView();
 });
-// The map fills the window behind the bar, the map controls and the panel. A route is fitted to what they leave clear.
+// The map fills the window behind the bar and the panel. A route is fitted to what they leave clear.
 function coveredEdges() {
   const box = map.getContainer().getBoundingClientRect();
-  const bottomOf = (element: Element | null) => {
-    const rect = element?.getBoundingClientRect();
-    return rect?.height ? rect.bottom - box.top + 6 : 0;
-  };
-  const top = Math.max(bottomOf(document.querySelector('header nav')), mapControls.parentElement === mapSection ? bottomOf(mapControls) : 0);
+  const bar = document.querySelector('header nav')!.getBoundingClientRect();
+  const top = bar.bottom - box.top + 6;
   // The legend and the map credit lie over the foot of the map. On a narrow screen they ride above the sheet.
   const above = (element: Element | null) => {
     const rect = element?.getBoundingClientRect();
