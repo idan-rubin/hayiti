@@ -377,25 +377,28 @@ await test('the buttons of the bar never cover the map style, at any width or in
 await test('tabbing past the days of a lowered sheet raises it, so focus is never out of sight', async () => {
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
-    const date = '2026-06-14';
-    await hostTrip(page, {
-      id: 'tab', title: 'Tabbing', start: date, end: date,
-      stops: [{ id: 'a', name: 'Market', date, xy: [51.92, 4.48] }, { id: 'b', name: 'Museum', date, xy: [51.925, 4.47] }]
-    });
-    await page.locator('.leaflet-marker-icon').nth(1).waitFor();
-    await page.locator('#sheetHandle').press('ArrowDown');
-    assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
-    // The days still show in the lowered sheet, and reaching them leaves it lowered.
-    await page.locator('#tripDate').focus();
-    assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
-    await page.keyboard.press('Tab');
-    await page.locator('body[data-sheet="half"]').waitFor();
-    await page.waitForFunction(() => {
-      const focused = document.activeElement!.getBoundingClientRect();
-      return document.activeElement !== document.body && focused.height > 0 && focused.top >= 0 && focused.bottom <= innerHeight;
-    });
-    assert.equal(await page.evaluate(() => document.getElementById('panel')!.contains(document.activeElement)), true);
+    for (const [width, height] of [[390, 844], [411, 400]]) {
+      const page = await browser.newPage({ viewport: { width, height }, hasTouch: true });
+      const date = '2026-06-14';
+      await hostTrip(page, {
+        id: 'tab', title: 'Tabbing', start: date, end: date,
+        stops: [{ id: 'a', name: 'Market', date, xy: [51.92, 4.48] }, { id: 'b', name: 'Museum', date, xy: [51.925, 4.47] }]
+      });
+      await page.locator('.leaflet-marker-icon').nth(1).waitFor();
+      await page.locator('#sheetHandle').press('ArrowDown');
+      assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
+      // The days still show in the lowered sheet, and reaching them leaves it lowered.
+      await page.locator('#tripDate').focus();
+      assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
+      await page.keyboard.press('Tab');
+      await page.locator('body[data-sheet="half"]').waitFor();
+      await page.waitForFunction(() => {
+        const focused = document.activeElement!.getBoundingClientRect();
+        return document.activeElement !== document.body && focused.height > 0 && focused.top >= 0 && focused.bottom <= innerHeight;
+      });
+      assert.equal(await page.evaluate(() => document.getElementById('panel')!.contains(document.activeElement)), true, `${width}×${height}`);
+      await page.close();
+    }
   } finally {
     await browser.close();
   }
@@ -416,8 +419,8 @@ await test('at the sizes a phone browser leaves, the half-raised sheet shows the
         return box.top >= list.top - 1 && box.bottom <= Math.min(list.bottom, foot.top) + 1;
       }).length;
     });
-    // An iPhone SE and an iPhone 14 in Safari, and a Pixel in Chrome, with the browser's own bars taken off.
-    for (const [width, height, least] of [[375, 553, 1], [390, 664, 2], [412, 780, 3]]) {
+    // An iPhone SE and an iPhone 14 in Safari, and a Pixel and a smaller Android phone in Chrome, with the browser's own bars taken off.
+    for (const [width, height, least] of [[375, 553, 3], [390, 664, 3], [412, 780, 3], [360, 640, 3]]) {
       await page.setViewportSize({ width, height });
       await restSheet(page, 'half');
       await sheetSettled(page);
@@ -445,16 +448,16 @@ await test('at the sizes a phone browser leaves, the half-raised sheet shows the
   }
 });
 
-await test('the resting portrait journal shows the starting point and up to two numbered visits with a disconnected source', async () => {
+await test('the resting sheet keeps one height as the days turn and shows the list as the raised sheet does', async () => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: { width: 375, height: 553 }, hasTouch: true });
-    const date = '2026-06-14', next = '2026-06-15';
-    const dayNote = 'We took the long way along the harbor to watch the ferries. '.repeat(8).trim();
-    const stopNote = 'The footpath on the river side leads back to the old boat landing. '.repeat(6).trim();
+    const date = '2026-06-14', next = '2026-06-15', empty = '2026-06-16';
+    const dayNote = 'We took the long way along the harbor to watch the ferries. '.repeat(3).trim();
+    const stopNote = 'The footpath on the river side leads back to the old boat landing. '.repeat(3).trim();
     const address = 'Riverside promenade, beside the visitor center at the north entrance to the park';
     const trip = {
-      id: 'guest', title: 'Harbor weekend', start: date, end: next, home: 'Harbor hotel', homeXY: [51.95, 4.49],
+      id: 'guest', title: 'Harbor weekend', start: date, end: empty, home: 'Harbor hotel', homeXY: [51.95, 4.49],
       dayNotes: { [date]: dayNote },
       stops: [
         ...dayOfStops(date, harbor.slice(0, 6)).map((stop, index) => ({
@@ -464,7 +467,7 @@ await test('the resting portrait journal shows the starting point and up to two 
         { id: 'ferry', name: 'Ferry dock', date: next, time: '10:30', xy: [51.93, 4.48],
           address: 'Upper harbor promenade, west entrance', sources: ['card'], count: 1 }
       ],
-      checks: { gmail: { status: 'disconnected', start: date, end: next, at: date + 'T12:00:00Z' } }
+      checks: { gmail: { status: 'disconnected', start: date, end: empty, at: date + 'T12:00:00Z' } }
     };
     await seedLegacyGuestOnce(page, { local: JSON.stringify({ trips: [trip] }) });
     await hostTrip(page, null);
@@ -472,61 +475,64 @@ await test('the resting portrait journal shows the starting point and up to two 
     await visits.first().waitFor();
     const days = [
       { date, names: ['Harbor hotel', ...harbor.slice(0, 6)] },
-      { date: next, names: ['Harbor hotel', 'Ferry dock'] }
+      { date: next, names: ['Harbor hotel', 'Ferry dock'] },
+      { date: empty, names: ['Harbor hotel'] }
     ];
+    // The height the sheet rests at, not the one it has on the way there.
+    const place = () => page.evaluate(() => {
+      const sheet = document.getElementById('panel')!.getBoundingClientRect(), dates = document.getElementById('dayReel')!.getBoundingClientRect();
+      return `sheet ${document.documentElement.style.getPropertyValue('--sheet')} tall, dates ${dates.top - sheet.top}px down it`;
+    });
+    const rowHeights = () => visits.evaluateAll(rows => rows.slice(0, 3).map(row => row.getBoundingClientRect().height));
     for (const lang of ['en', 'he']) {
       await page.locator('#languageSwitch').selectOption(lang);
-      for (const day of days) {
-        await page.locator('#tripDate').selectOption(day.date);
-        assert.deepEqual(await visits.locator('.stopname').allTextContents(), day.names);
-        assert.deepEqual(await visits.locator('.num').allTextContents(), day.names.map((_, index) => index ? String(index) : '⌂'));
-        for (const [width, height] of [[375, 553], [390, 664]]) {
-          await page.setViewportSize({ width, height });
+      for (const [width, height] of [[375, 553], [390, 664]]) {
+        await page.setViewportSize({ width, height });
+        const places: string[] = [];
+        for (const day of days) {
+          await page.locator('#tripDate').selectOption(day.date);
           await sheetSettled(page);
           assert.equal(await page.locator('body').getAttribute('data-sheet'), 'half');
-          const layout = await page.evaluate(() => {
-            const list = document.querySelector('.listbody')!, panel = document.getElementById('panel')!;
-            const bounds = list.getBoundingClientRect();
-            const bottom = Math.min(bounds.bottom, document.querySelector('.toolbar')!.getBoundingClientRect().top);
-            const rows = [...document.querySelectorAll('#stops .stop')].slice(0, 3).map(row => {
-              const { top, bottom } = row.getBoundingClientRect();
-              return { name: row.querySelector('.stopname')!.textContent, top, bottom };
-            });
-            return { top: bounds.top, bottom, listScroll: list.scrollTop, panelScroll: panel.scrollTop, rows };
-          });
-          const visible = layout.rows.filter(row => row.bottom > row.top && row.top >= layout.top - 1 && row.bottom <= layout.bottom + 1);
-          const diagnostic = `${lang} ${width}×${height} ${day.date}: ${JSON.stringify(layout)}`;
-          assert.equal(layout.listScroll, 0, diagnostic);
-          assert.equal(layout.panelScroll, 0, diagnostic);
-          assert.deepEqual(visible.map(row => row.name), day.names.slice(0, 3), diagnostic);
-          assert.equal(await page.locator('#reviewDay').isVisible(), false);
+          assert.deepEqual(await visits.locator('.stopname').allTextContents(), day.names);
+          assert.deepEqual(await visits.locator('.num').allTextContents(), day.names.map((_, index) => index ? String(index) : '⌂'));
+          places.push(await place());
         }
-        if (day.date === date) {
-          const note = page.locator('#dayNote');
-          const order = () => note.evaluate(element => {
-            const text = element.getBoundingClientRect(), stops = document.getElementById('stops')!.getBoundingClientRect();
-            return { before: text.bottom <= stops.top + 1, after: text.top >= stops.bottom - 1 };
+        await toggleWholeTrip(page);
+        await page.locator('body.trip-overview').waitFor();
+        await sheetSettled(page);
+        places.push(await place());
+        await toggleWholeTrip(page);
+        assert.equal(new Set(places).size, 1, `${lang} ${width}×${height}: the sheet and the dates hold still as the day changes, found ${places.join(' | ')}`);
+      }
+      await page.locator('#tripDate').selectOption(next);
+      assert.equal(await page.locator('#reviewDay').isVisible(), false);
+      await page.locator('#tripDate').selectOption(date);
+      await sheetSettled(page);
+      assert.equal(await page.locator('#reviewDay').innerText(), lang === 'en' ? 'More about this day (1)' : 'מידע נוסף לאותו יום (1)');
+      assert.equal(await page.locator('#reviewDay').isVisible(), true, `${lang}: the resting sheet offers the rest of the day's records`);
+      const note = page.locator('#dayNote'), firstVisit = visits.nth(1);
+      const noteLeads = () => note.evaluate(element =>
+        element.getBoundingClientRect().bottom <= document.getElementById('stops')!.getBoundingClientRect().top + 1);
+      const resting = await rowHeights();
+      for (const stop of ['half', 'full'] as const) {
+        await restSheet(page, stop);
+        await sheetSettled(page);
+        assert.ok(await noteLeads(), `${lang} ${stop}: the day note comes before the stops`);
+        assert.deepEqual(await rowHeights(), resting, `${lang} ${stop}: the stops are set the same at every height of the sheet`);
+        for (const [element, expected] of [
+          [note, dayNote], [firstVisit.locator('.meta').first(), '09:00 · ' + address], [firstVisit.locator('.meta').nth(1), stopNote]
+        ] as const) {
+          await element.scrollIntoViewIfNeeded();
+          assert.equal(await element.innerText(), expected);
+          const readable = await element.evaluate(el => {
+            const text = el.getBoundingClientRect(), list = el.closest('.listbody')!.getBoundingClientRect();
+            return text.height > 0 && text.top >= list.top - 1 && text.bottom <= list.bottom + 1 &&
+              el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1;
           });
-          assert.ok((await order()).after, 'the resting sheet places the day note after the route');
-          await restSheet(page, 'full');
-          await sheetSettled(page);
-          assert.ok((await order()).before, 'the raised sheet starts the list with the day note');
-          const firstVisit = visits.nth(1);
-          for (const [element, expected] of [
-            [note, dayNote], [firstVisit.locator('.meta').first(), '09:00 · ' + address], [firstVisit.locator('.stop-note'), stopNote]
-          ] as const) {
-            await element.scrollIntoViewIfNeeded();
-            assert.equal(await element.innerText(), expected);
-            const readable = await element.evaluate(el => {
-              const text = el.getBoundingClientRect(), list = el.closest('.listbody')!.getBoundingClientRect();
-              return text.height > 0 && text.top >= list.top - 1 && text.bottom <= list.bottom + 1 &&
-                el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1;
-            });
-            assert.ok(readable, `${lang}: the raised sheet shows the complete text of "${expected.slice(0, 28)}…"`);
-          }
-          await restSheet(page, 'half');
+          assert.ok(readable, `${lang} ${stop}: the complete text of "${expected.slice(0, 28)}…" can be read`);
         }
       }
+      await restSheet(page, 'half');
       const notice = lang === 'en' ? '1 source disconnected' : 'מקור אחד מנותק';
       const label = lang === 'en' ? 'Sources and import' : 'מקורות וייבוא';
       const sources = page.locator('.toolbar').getByRole('button', { name: label + ' · ' + notice, exact: true });
@@ -602,6 +608,108 @@ await test('a short, narrow window scrolls the sheet as a whole, so every stop i
       assert.ok(Math.abs(actions.y + actions.height - 400) <= 2, `${stop}: the actions stay at the foot`);
       assert.ok(row.y >= handle.y + handle.height - 1 && row.y + row.height <= actions.y + 1, `${stop}: the last stop shows between them`);
     }
+  } finally {
+    await browser.close();
+  }
+});
+
+const headingShown = (page: Page) => page.evaluate(() => {
+  const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+  const panel = box('#panel'), handle = box('#sheetHandle');
+  return ['#title', '#dayReel', '.date-menu'].every(part => box(part).top >= handle.bottom - 1 && box(part).bottom <= panel.bottom + 1);
+});
+const lowerSheet = async (page: Page) => {
+  await page.locator('#sheetHandle').press('ArrowDown');
+  await page.locator('body[data-sheet="peek"]').waitFor();
+  await sheetSettled(page);
+};
+const raiseSheet = async (page: Page) => {
+  await page.locator('#sheetHandle').press('ArrowUp');
+  await page.locator('body[data-sheet="half"]').waitFor();
+  await sheetSettled(page);
+};
+
+await test('lowered in a short, narrow window the sheet shows the trip and its days within reach, and raising it returns to the same stops', async () => {
+  const browser = await chromium.launch();
+  try {
+    for (const [width, height] of [[411, 400], [320, 480]]) {
+      const page = await browser.newPage({ viewport: { width, height }, hasTouch: true });
+      const date = '2026-06-14';
+      await hostTrip(page, { id: 'short', title: 'Short window', start: date, end: date, stops: dayOfStops(date, harbor) });
+      await page.locator('.leaflet-marker-icon').nth(7).waitFor();
+      const panel = page.locator('#panel');
+      for (const lang of ['en', 'he']) {
+        await page.locator('#languageSwitch').selectOption(lang);
+        await sheetSettled(page);
+        // Focus can scroll the panel, so the handle takes it before the list is scrolled.
+        await page.locator('#sheetHandle').focus();
+        await panel.evaluate(element => { element.scrollTop = 200; });
+        const scrolled = await panel.evaluate(element => element.scrollTop);
+        assert.ok(scrolled > 100, `${width}×${height} ${lang}: the stops are scrolled`);
+        await lowerSheet(page);
+        assert.ok(await headingShown(page), `${width}×${height} ${lang}: the trip name and the date show in the lowered sheet`);
+        await page.locator('#dayReel').click({ trial: true, timeout: 2000 });
+        await page.locator('#tripDate').click({ trial: true, timeout: 2000 });
+        await raiseSheet(page);
+        assert.equal(await panel.evaluate(element => element.scrollTop), scrolled, `${width}×${height} ${lang}: the stops are where they were`);
+      }
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+await test('a stop chosen on the map while a short sheet is lowered is in view once the sheet is raised', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 411, height: 400 }, hasTouch: true });
+    const date = '2026-06-14';
+    await hostTrip(page, { id: 'short', title: 'Short window', start: date, end: date, stops: dayOfStops(date, harbor) });
+    await page.locator('.leaflet-marker-icon').nth(7).waitFor();
+    await lowerSheet(page);
+    await page.locator('.leaflet-marker-icon[title^="Ferry dock"]').click();
+    const chosen = page.locator('#stops .activeStop .stopname');
+    assert.equal(await chosen.textContent(), 'Ferry dock');
+    assert.ok(await headingShown(page), 'the lowered sheet still shows the trip name and the date');
+    await raiseSheet(page);
+    const name = (await chosen.boundingBox())!;
+    const handle = (await page.locator('#sheetHandle').boundingBox())!;
+    const actions = (await page.locator('.toolbar').boundingBox())!;
+    assert.ok(name.y >= handle.y + handle.height - 1 && name.y + name.height <= actions.y + 1, 'the chosen stop shows between the handle and the actions');
+  } finally {
+    await browser.close();
+  }
+});
+
+await test('another day or the whole trip chosen in a lowered short sheet opens the raised list from its start', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 411, height: 400 }, hasTouch: true });
+    const days = ['2026-06-14', '2026-06-15'];
+    await hostTrip(page, {
+      id: 'two', title: 'Two days', start: days[0], end: days[1],
+      stops: [...dayOfStops(days[0], harbor), ...dayOfStops(days[1], harbor.slice(0, 4)).map(stop => ({ ...stop, id: 'next' + stop.id }))]
+    });
+    await page.locator('.leaflet-marker-icon').nth(7).waitFor();
+    const panel = page.locator('#panel');
+    await page.locator('#sheetHandle').focus();
+    await panel.evaluate(element => { element.scrollTop = 200; });
+    await lowerSheet(page);
+    await page.locator('#tripDate').selectOption(days[1]);
+    assert.ok(await headingShown(page), 'the lowered sheet shows the day that was chosen');
+    await raiseSheet(page);
+    assert.equal(await panel.evaluate(element => element.scrollTop), 0);
+
+    await panel.evaluate(element => { element.scrollTop = 80; });
+    await lowerSheet(page);
+    await toggleWholeTrip(page);
+    await page.locator('body.trip-overview').waitFor();
+    assert.ok(await headingShown(page), 'the lowered sheet names the whole trip under the trip name');
+    await raiseSheet(page);
+    const offset = await page.evaluate(() =>
+      document.querySelector('.daybar')!.getBoundingClientRect().top - document.getElementById('sheetHandle')!.getBoundingClientRect().bottom);
+    assert.ok(Math.abs(offset) <= 1, `the list of days starts under the handle, found ${offset}`);
   } finally {
     await browser.close();
   }

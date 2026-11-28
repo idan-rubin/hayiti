@@ -138,18 +138,16 @@ let overviewTripId = '';
 let routeBounds = L.latLngBounds([]),
   fitFrame = 0;
 // Lowered all the way, the sheet still shows the trip and its days.
-const sheet = createSheet($('panel'), $('sheetHandle'), map.getContainer().parentElement!, () => {
+const heading = () => {
   const dates = $('dayReel').parentElement!;
   const last = dates.hidden ? $('range') : dates.parentElement!;
   return last.offsetTop + last.offsetHeight;
-}, () => {
-  const firstRows = $('stops').querySelectorAll<HTMLElement>(':scope > .stop:nth-child(-n+3)');
-  const last = firstRows[firstRows.length - 1];
-  if (!last) return 0;
-  const list = last.closest<HTMLElement>('.listbody')!;
-  const toolbar = $('panel').querySelector<HTMLElement>('.toolbar')!;
-  return last.getBoundingClientRect().bottom + list.scrollTop - $('panel').getBoundingClientRect().top + toolbar.offsetHeight + 2;
-}, () => fitRoute());
+};
+// Room under the heading for the day's summary, three ordinary stops and the day's actions, in rem as the stylesheet
+// sets them. Measuring the day's own stops instead would move the dates under the finger that turns them.
+const firstStopsRoom = 18;
+const sheet = createSheet($('panel'), $('sheetHandle'), map.getContainer().parentElement!, heading, () =>
+  heading() + firstStopsRoom * parseFloat(getComputedStyle(document.documentElement).fontSize), () => fitRoute());
 const mapSection = map.getContainer().parentElement!,
   mapControls = document.querySelector<HTMLElement>('.map-controls')!;
 const sheetWidth = matchMedia(sheetLayout);
@@ -435,7 +433,9 @@ function render() {
   if ((trip?.id ?? '') !== shownTripId) {
     shownTripId = trip?.id ?? '';
     document.querySelector<HTMLElement>('.listbody')!.scrollTop = 0;
-    $('panel').scrollTop = 0;
+    sheet.scroll(() => {
+      $('panel').scrollTop = 0;
+    });
   }
 }
 const stopCount = (count: number) => count === 1 ? t('תחנה אחת') : count + t(' תחנות');
@@ -448,6 +448,9 @@ const { setDates, showWholeTrip } = createDateReel($('dayReel'), $('tripDate'), 
   draw();
   // Not startList(): scrolling the panel would move the reel under the finger.
   document.querySelector<HTMLElement>('.listbody')!.scrollTop = 0;
+  if (sheet.lowered) sheet.scroll(() => {
+    $('panel').scrollTop = 0;
+  });
 });
 function distanceLabel(meters: number) {
   return meters < 1000 ? Math.max(1, Math.round(meters / 10) * 10) + t(' מ׳') : dateFormats[language].distance.format(meters / 1000) + t(' ק״מ');
@@ -478,7 +481,9 @@ function showDailyStats(stats: ReturnType<typeof walkingStats>) {
 function startList() {
   const list = document.querySelector<HTMLElement>('.listbody')!;
   if (getComputedStyle(list).overflowY !== 'visible') list.scrollTop = 0;
-  else $('panel').scrollTop = Math.max(0, $('dayReel').closest<HTMLElement>('.daybar')!.offsetTop - $('sheetHandle').offsetHeight);
+  else sheet.scroll(() => {
+    $('panel').scrollTop = Math.max(0, $('dayReel').closest<HTMLElement>('.daybar')!.offsetTop - $('sheetHandle').offsetHeight);
+  });
 }
 function openMapDay(date: string) {
   overviewTripId = '';
@@ -519,7 +524,7 @@ function appendStopRow(s: Stop, i: number, list: Stop[], number: string) {
   col.append(dom('div', hints.join(' · '), 'meta'));
   const evidence = [...(s.sources || []).map(k => t(label[k])), s.count ? quantity(s.count, ' חיובים', 'charge', 'charges') : '', s.photos?.length ? quantity(s.photos.length, ' תמונות', 'photo', 'photos') : ''].filter(Boolean).join(' · ');
   if (evidence) col.append(dom('span', evidence, 'src'));
-  if (s.notes) col.append(dom('div', s.notes, 'meta stop-note'));
+  if (s.notes) col.append(dom('div', s.notes, 'meta'));
   const actions = dom('div', undefined, 'tools');
   if (s.kind !== 'origin') {
     for (const [sign, delta] of [['↑', -1], ['↓', 1]] as const) {
@@ -798,25 +803,33 @@ $('reviewDay').onclick = () => {
   $('other').open = true;
   $('otherSummary').focus();
 };
+function showRow(id: string) {
+  // Only the list scrolls, and the panel around it stays where it is. On a screen with little height
+  // the whole panel scrolls instead, and the day's actions at its foot lie over the last of it.
+  const row = rows.get(id),
+    list = row?.closest<HTMLElement>('.listbody');
+  if (!row || !list) return;
+  const ownScroll = getComputedStyle(list).overflowY !== 'visible';
+  const scroller = ownScroll ? list : $('panel');
+  const foot = document.querySelector<HTMLElement>('.toolbar');
+  const shown = scroller.getBoundingClientRect(),
+    box = row.getBoundingClientRect();
+  const top = ownScroll ? shown.top : shown.top + $('sheetHandle').offsetHeight;
+  const bottom = ownScroll || !foot?.offsetHeight ? shown.bottom : foot.getBoundingClientRect().top;
+  // If a long note cannot fit, show the stop's name and controls at the top of its row.
+  if (box.top < top || box.height > bottom - top) scroller.scrollTop += box.top - top;
+  else if (box.bottom > bottom) scroller.scrollTop += box.bottom - bottom;
+}
 function reveal(id: string, target: 'row' | 'pin') {
   selected = id;
   for (const [key, row] of rows) row.classList.toggle('activeStop', key === id);
   if (target === 'row') {
-    // Only the list scrolls, and the panel around it stays where it is. On a screen with little height
-    // the whole panel scrolls instead, and the day's actions at its foot lie over the last of it.
-    const row = rows.get(id),
-      list = row?.closest<HTMLElement>('.listbody');
-    if (!row || !list) return;
-    const ownScroll = getComputedStyle(list).overflowY !== 'visible';
-    const scroller = ownScroll ? list : $('panel');
-    const foot = document.querySelector<HTMLElement>('.toolbar');
-    const shown = scroller.getBoundingClientRect(),
-      box = row.getBoundingClientRect();
-    const top = ownScroll ? shown.top : shown.top + $('sheetHandle').offsetHeight;
-    const bottom = ownScroll || !foot?.offsetHeight ? shown.bottom : foot.getBoundingClientRect().top;
-    // If a long note cannot fit, show the stop's name and controls at the top of its row.
-    if (box.top < top || box.height > bottom - top) scroller.scrollTop += box.top - top;
-    else if (box.bottom > bottom) scroller.scrollTop += box.bottom - bottom;
+    const list = rows.get(id)?.closest<HTMLElement>('.listbody');
+    if (!list) return;
+    if (getComputedStyle(list).overflowY !== 'visible') showRow(id);
+    else sheet.scroll(() => {
+      if (selected === id) showRow(id);
+    });
     return;
   }
   // On a phone a full sheet covers the map, which is fitted again as the sheet lowers.

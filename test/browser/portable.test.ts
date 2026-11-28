@@ -1266,7 +1266,6 @@ await test('one daily details panel keeps unlocated visits, unconfirmed attendan
       if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ trips: [seed] }));
     }, trip);
     await page.goto(new URL('../../dist/web/Hayiti.html?lang=he', import.meta.url).href);
-    await restSheet(page, 'full');
     await page.locator('#reviewDay').click();
     assert.equal(await page.locator('#otherSummary').innerText(), 'מידע נוסף לאותו יום (5)');
     assert.equal(await page.locator('#otherSummary').evaluate(el => document.activeElement === el), true);
