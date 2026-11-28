@@ -9,7 +9,7 @@ import { journalSchemaVersion } from '../../src/domain/journal-schema.ts';
 import { loadState, storeState } from '../../src/server/storage.ts';
 import { MemoryBucket } from '../memory-bucket.ts';
 import { guestTitles, patchGuestRecord, readGuestRecord, refuseGuestWrites } from './guest-storage-helpers.ts';
-import { backUpTrip, openMenu } from './journal-controls.ts';
+import { backUpTrip, openMenu, toggleWholeTrip } from './journal-controls.ts';
 
 // An https origin keeps the page a secure context, as the hosted journal is.
 const origin = 'https://hayiti.test';
@@ -38,6 +38,39 @@ async function hostJournal(page: Page, api: (route: Route) => Promise<void> | vo
     }
   });
 }
+
+await test('a lowered sheet fits a late journal error and its translation', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 375, height: 553 }, reducedMotion: 'reduce' });
+    let failLoad = () => {};
+    const pending = new Promise<void>(resolve => { failLoad = resolve; });
+    await hostJournal(page, async route => {
+      await pending;
+      await route.fulfill({ status: 503 });
+    });
+    await page.goto(origin + '/journal.html?lang=en');
+    await page.locator('#sheetHandle').press('ArrowDown');
+    await page.locator('body[data-sheet="peek"]').waitFor();
+    failLoad();
+    await page.locator('#status').filter({ hasText: 'Choose Try again.' }).waitFor();
+    const checkStatus = async () => {
+      await page.waitForFunction(() => {
+        const status = document.getElementById('status')!.getBoundingClientRect();
+        const panel = document.getElementById('panel')!.getBoundingClientRect();
+        return status.height > 0 && status.top >= panel.top && status.bottom <= panel.bottom;
+      }, null, { timeout: 3000 });
+      assert.equal(await page.locator('body').getAttribute('data-sheet'), 'peek');
+    };
+    await checkStatus();
+    for (const lang of ['he', 'en']) {
+      await page.locator('#languageSwitch').selectOption(lang);
+      await checkStatus();
+    }
+  } finally {
+    await browser.close();
+  }
+});
 
 await test('a trip started before signing in is added to the journal after sign-in', async () => {
   const browser = await chromium.launch();
@@ -85,7 +118,7 @@ await test('a trip started before signing in is added to the journal after sign-
 await test('a shared route stays on screen through a temporary failure and clears when revoked', async () => {
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage();
+    const page = await browser.newPage({ viewport: { width: 390, height: 664 } });
     let status = 200;
     const snapshot = {
       id: 'shared', title: 'Shared day', start: '2026-06-14', end: '2026-06-15',
@@ -96,9 +129,18 @@ await test('a shared route stays on screen through a temporary failure and clear
       : route.fulfill({ status }));
     await page.goto(origin + '/journal.html?lang=en#route=fictional');
     await page.locator('body.route-ready').waitFor();
-    const wholeTrip = page.getByRole('button', { name: 'Whole trip' });
+    assert.equal(await page.locator('body').getAttribute('data-sheet'), 'half');
+    await page.getByRole('status').filter({ hasText: 'Shared route · View only' }).waitFor();
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const wholeTrip = page.locator('#wholeTrip');
+    await openMenu(page);
+    assert.deepEqual(await page.locator('#menu button:visible').allInnerTexts(), ['Whole trip']);
+    assert.equal(await page.locator('#menu .beta-links').isVisible(), false);
     await wholeTrip.click();
     assert.equal(await wholeTrip.getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#listTitle').innerText(), 'Trip days');
+    await openMenu(page);
+    assert.equal(await wholeTrip.innerText(), 'Back to the day');
     await wholeTrip.click();
     assert.equal(await wholeTrip.getAttribute('aria-pressed'), 'false');
     assert.equal(await page.locator('#import').isVisible(), false);
@@ -377,7 +419,7 @@ await test('a refused guest merge keeps the selected trip and day', async () => 
     });
     await page.goto(origin + '/journal.html?lang=en');
     await page.locator('#trips').selectOption('b');
-    await page.locator('#dayStrip [aria-pressed="true"]').press('End');
+    await page.locator('#dayReel').press('End');
     assert.equal(await page.locator('#tripDate').inputValue(), trips[1].end);
     await chooseSignIn(page);
     signedIn = true;
@@ -978,7 +1020,7 @@ await test('a trip made without signing in is still there in a new tab, and both
     await hostJournal(first, guestAPI);
     await first.goto(origin + '/journal.html?lang=en');
     await createTrip(first, 'Guest trip');
-    await first.locator('#status').filter({ hasText: 'saved in this browser' }).waitFor();
+    await first.locator('#status').filter({ hasText: 'Saved on this device' }).waitFor();
     // The trip is kept, so leaving needs no warning.
     assert.equal(await first.evaluate(() => {
       const leaving = new Event('beforeunload', { cancelable: true });
@@ -1278,7 +1320,7 @@ await test('Sign out is offered only while the account journal is open', async (
   }
 });
 
-await test('the mobile sheet keeps the days on one row and the day actions on another in either language', async () => {
+await test('the mobile sheet keeps the date reel on one row and the day actions on another in either language', async () => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ hasTouch: true });
@@ -1287,8 +1329,8 @@ await test('the mobile sheet keeps the days on one row and the day actions on an
     for (const lang of ['he', 'en']) {
       await page.goto(origin + '/journal.html?lang=' + lang);
       const toolbar = page.locator('.toolbar');
-      const overview = page.locator('.daybar #wholeTrip');
-      await overview.waitFor();
+      const overview = page.locator('#menu #wholeTrip');
+      await page.locator('#dayReel').waitFor();
       for (const width of [320, 375, 390, 430]) {
         await page.setViewportSize({ width, height: 852 });
         const [left, right] = await page.locator('#settings, #newTrip').evaluateAll(buttons =>
@@ -1300,18 +1342,24 @@ await test('the mobile sheet keeps the days on one row and the day actions on an
         assert.ok(right.left >= left.right, `${lang} ${width}px: trip settings and new trip sit side by side`);
         for (const pressed of [false, true]) {
           assert.equal(await overview.getAttribute('aria-pressed'), String(pressed));
-          // Whole trip, the three days and the list of dates share one row inside the sheet.
           const days = await page.locator('.daybar').evaluate(bar => {
             const sheet = bar.getBoundingClientRect();
-            const parts = [...bar.querySelectorAll('#wholeTrip, #dayStrip button, .date-menu')].map(part => part.getBoundingClientRect());
+            const parts = [...bar.querySelectorAll('#dayReel, .date-menu')].map(part => part.getBoundingClientRect());
+            const reel = bar.querySelector('#dayReel')!.getBoundingClientRect();
+            const faces = [...bar.querySelectorAll('#dayReel > div')].filter(face => {
+              const box = face.getBoundingClientRect();
+              return box.top < reel.bottom - 1 && box.bottom > reel.top + 1 && getComputedStyle(face).visibility !== 'hidden';
+            });
             return {
               count: parts.length,
               oneRow: Math.max(...parts.map(box => box.top)) < Math.min(...parts.map(box => box.bottom)),
               inside: parts.every(box => box.left >= sheet.left - 1 && box.right <= sheet.right + 1),
-              pressed: bar.querySelectorAll('#dayStrip [aria-pressed="true"]').length
+              dates: faces.length,
+              named: getComputedStyle(bar.querySelector('.date-control')!, '::before').content
             };
           });
-          assert.deepEqual(days, { count: 5, oneRow: true, inside: true, pressed: pressed ? 0 : 1 }, `${lang} ${width}px: day row`);
+          const whole = lang === 'he' ? 'כל הטיול' : 'Whole trip';
+          assert.deepEqual(days, { count: 2, oneRow: true, inside: true, dates: pressed ? 0 : 1, named: pressed ? JSON.stringify(whole) : 'none' }, `${lang} ${width}px: day row`);
           const boxes = await toolbar.locator('button:visible').evaluateAll(buttons => buttons.map(button => {
             const { top, left, right } = button.getBoundingClientRect();
             const label = [...button.children].find(child => child.localName === 'span' && child.checkVisibility()) ?? button;
@@ -1337,8 +1385,12 @@ await test('the mobile sheet keeps the days on one row and the day actions on an
           assert.ok(bounds);
           assert.ok(boxes.every(box => box.left >= bounds.x - 1 && box.right <= bounds.x + bounds.width + 1));
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${lang} ${width}px: nothing spills past the window`);
-          assert.equal(await page.locator('.mapcard #mapStyle').isVisible(), true);
+          assert.equal(await page.locator('.mapcard #mapStyle').count(), 0);
+          await openMenu(page);
+          assert.equal(await page.locator('#menu #mapStyle').isVisible(), true);
+          assert.equal(await overview.innerText(), pressed ? (lang === 'he' ? 'חזרה ליום' : 'Back to the day') : whole);
           await overview.click();
+          await page.locator('#menu').waitFor({ state: 'hidden' });
         }
       }
       await page.setViewportSize({ width: 960, height: 852 });
@@ -1349,20 +1401,22 @@ await test('the mobile sheet keeps the days on one row and the day actions on an
   }
 });
 
-await test('the day strip keeps the chosen day in view and the day count beside the walking summary', async () => {
+await test('the date reel turns through the days, and the day count follows it beside the walking summary', async () => {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ hasTouch: true });
     const trip = { id: 'ordinal', start: '2026-10-20', end: '2026-11-19', stops: [{ id: 'a', name: 'Market', date: '2026-10-22', xy: [51.92, 4.48] }] };
     await hostJournal(page, route => route.fulfill({ json: { schemaVersion: journalSchemaVersion, trips: [trip], rev: 'r1' } }));
-    const strip = page.locator('#dayStrip');
-    const chosen = strip.locator('[aria-pressed="true"]');
+    const reel = page.locator('#dayReel');
     const progress = page.locator('#dayProgress');
-    // The chosen day lies wholly inside the part of the strip that shows.
-    const inView = () => chosen.evaluate(day => {
-      const box = day.getBoundingClientRect(), shown = day.parentElement!.getBoundingClientRect();
-      return box.left >= shown.left - 1 && box.right <= shown.right + 1;
+    const shown = () => reel.evaluate(wheel => {
+      const opening = wheel.getBoundingClientRect();
+      return [...wheel.children].filter(face => {
+        const box = face.getBoundingClientRect();
+        return box.top < opening.bottom - 2 && box.bottom > opening.top + 2 && getComputedStyle(face).visibility !== 'hidden';
+      }).map(face => (face as HTMLElement).innerText.trim());
     });
+    const listed = () => page.locator('#tripDate').evaluate(menu => (menu as HTMLSelectElement).selectedOptions[0].text.split(' · ')[0]);
     for (const lang of ['he', 'en']) {
       await page.goto(origin + '/journal.html?lang=' + lang);
       const dayLabel = (day: number) => lang === 'he' ? `יום ${day} מתוך 31` : `Day ${day} of 31`;
@@ -1370,37 +1424,78 @@ await test('the day strip keeps the chosen day in view and the day count beside 
         await page.setViewportSize({ width, height: 852 });
         await page.locator('#tripDate').selectOption('2026-10-22');
         assert.equal(await progress.innerText(), dayLabel(3));
-        assert.equal(await chosen.getAttribute('data-day'), '2026-10-22');
-        assert.ok((await chosen.getAttribute('aria-label'))?.includes(dayLabel(3)));
-        // A dot marks the one day that has a stop.
-        assert.deepEqual(await strip.locator('[data-recorded]').evaluateAll(days => days.map(day => (day as HTMLElement).dataset.day)), ['2026-10-22']);
-        assert.equal(await strip.locator('button').count(), 31);
-        assert.equal(await inView(), true);
-        // The month is named once, where November begins.
-        assert.deepEqual(await strip.locator('span').allTextContents(), [lang === 'he' ? 'נוב׳' : 'Nov']);
+        assert.ok((await reel.getAttribute('aria-valuetext'))?.includes(dayLabel(3)));
+        assert.deepEqual([await reel.getAttribute('aria-valuenow'), await reel.getAttribute('aria-valuemax')], ['3', '31']);
+        assert.deepEqual(await shown(), [await listed()]);
+        const date = await reel.locator('> div').nth(2).locator('span').boundingBox();
+        const wheel = await reel.boundingBox();
+        assert.ok(date && wheel && date.x >= wheel.x && date.x + date.width <= wheel.x + wheel.width);
+        assert.deepEqual(await page.locator('#tripDate option').evaluateAll(options =>
+          options.filter(option => option.textContent.includes('·')).map(option => (option as HTMLOptionElement).value)), ['2026-10-22']);
         const counter = await progress.boundingBox();
         const summary = await page.locator('#dayStats summary').boundingBox();
         assert.ok(counter && summary && counter.y < summary.y + summary.height && summary.y < counter.y + counter.height);
         assert.ok(lang === 'he' ? counter.x + counter.width <= summary.x : counter.x >= summary.x + summary.width);
-        // The arrow keys follow the reading direction.
-        await chosen.press(lang === 'he' ? 'ArrowLeft' : 'ArrowRight');
+        await reel.evaluate(el => { el.scrollTop += el.clientHeight; });
         await progress.filter({ hasText: dayLabel(4) }).waitFor();
-        assert.equal(await chosen.evaluate(day => day === document.activeElement), true);
-        await chosen.press('End');
+        assert.equal(await page.locator('#tripDate').inputValue(), '2026-10-23');
+        assert.deepEqual(await shown(), [await listed()]);
+        for (const [key, day] of [['ArrowUp', 5], ['ArrowDown', 4], ['PageUp', 11], ['PageDown', 4]] as const) {
+          await reel.press(key);
+          assert.equal(await progress.innerText(), dayLabel(day));
+          assert.equal(await reel.getAttribute('aria-valuenow'), String(day));
+        }
+        await reel.press('Space');
+        await page.waitForTimeout(300);
+        assert.equal(await progress.innerText(), dayLabel(4), 'Space leaves the day as it is');
+        await reel.press('End');
         assert.equal(await progress.innerText(), dayLabel(31));
         assert.equal(await page.locator('#tripDate').inputValue(), '2026-11-19');
-        assert.equal(await inView(), true);
-        await page.locator('#wholeTrip').click();
+        await toggleWholeTrip(page);
         assert.equal(await progress.isVisible(), false);
-        assert.equal(await chosen.count(), 0);
-        // Choosing the day that was open returns from the whole trip to that day.
-        await strip.locator('[data-day="2026-11-19"]').click();
+        assert.deepEqual(await shown(), []);
+        assert.equal(await page.locator('.date-control').evaluate(control => getComputedStyle(control, '::before').content),
+          JSON.stringify(lang === 'he' ? 'כל הטיול' : 'Whole trip'));
+        await reel.click();
         assert.equal(await page.locator('#wholeTrip').getAttribute('aria-pressed'), 'false');
         assert.equal(await progress.innerText(), dayLabel(31));
+        assert.deepEqual(await shown(), [await listed()]);
       }
       await page.setViewportSize({ width: 1200, height: 852 });
       assert.equal(await progress.isVisible(), true);
-      assert.equal(await inView(), true);
+      assert.deepEqual(await shown(), [await listed()]);
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+await test('a one-day trip announces the whole-trip view and reopens the day from the reel or date list', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 375, height: 553 } });
+    const date = '2026-06-14';
+    const trip = { id: 'park', title: 'Harbor day', start: date, end: date,
+      stops: [{ id: 'visit', name: 'South park', date, xy: [51.92, 4.48] }] };
+    await hostJournal(page, route => route.fulfill({ json: { schemaVersion: journalSchemaVersion, trips: [trip], rev: 'r1' } }));
+    await page.goto(origin + '/journal.html?lang=en');
+    const reel = page.getByRole('spinbutton'), dates = page.locator('#tripDate');
+    await reel.waitFor();
+    for (const [lang, whole] of [['en', 'Whole trip'], ['he', 'כל הטיול']]) {
+      await page.locator('#languageSwitch').selectOption(lang);
+      const day = await reel.getAttribute('aria-valuetext');
+      assert.ok(day && day !== whole);
+      for (const control of ['Enter', 'Space', 'ArrowDown', 'Home', 'End', 'list']) {
+        await toggleWholeTrip(page);
+        assert.equal(await reel.getAttribute('aria-valuetext'), whole);
+        assert.equal(await dates.inputValue(), '');
+        if (control === 'list') await dates.selectOption(date);
+        else await reel.press(control);
+        assert.equal(await page.locator('#wholeTrip').getAttribute('aria-pressed'), 'false');
+        assert.equal(await reel.getAttribute('aria-valuetext'), day);
+        assert.equal(await dates.inputValue(), date);
+        assert.equal(await page.locator('#stops .stopname').innerText(), 'South park');
+      }
     }
   } finally {
     await browser.close();

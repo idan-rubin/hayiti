@@ -61,7 +61,7 @@ export const messages: Record<string, string> = {
   "נשמר בדפדפן הזה.": "Saved in this browser.",
   "השינויים בזיכרון הלשונית. לשמירה יש להוריד גיבוי.": "Changes are stored in this tab. Download a backup to keep them.",
   "השינויים נשמרו ביומן האישי.": "Changes saved to your journal.",
-  "השינויים נשמרו בדפדפן הזה. כדי לשמור אותם בין מכשירים נכנסים עם ChatGPT.": "Changes are saved in this browser. Sign in with ChatGPT to keep them across devices.",
+  "נשמר במכשיר הזה": "Saved on this device",
   "הקישור בוטל או אינו זמין.": "This link has been revoked or is unavailable.",
   "לא ניתן לטעון את המסלול כרגע.": "The route could not be loaded. Try again later.",
   "מסלול משותף · לצפייה בלבד": "Shared route · View only",

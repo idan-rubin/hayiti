@@ -75,12 +75,14 @@ The orange dashed line shows the taxi ride. Taxi pins show approximate locations
 
 - **Numbered stops** appear in order, each with a pin. A solid green line shows an estimated walk. An orange dashed line shows a taxi ride. A green dashed line shows the order when the route between stops is unknown.
 - **More about this day** holds what could not be placed: places without a pin, visits to confirm and remote purchases.
-- **Whole trip** shows every day on one map, each day's pins and route in its own color. Choose streets, satellite imagery or terrain.
+- **The date reel** under the trip's name turns from day to day, like the wheel of a slot machine. The arrow beside it lists every date and what is recorded for it.
+- **Whole trip**, in the menu at the end of the bar, shows every day on one map, each day's pins and route in its own color. The same menu row leads back to the day.
+- **Map style** switches between streets, satellite imagery and terrain.
 - **Edit anything.** Move a stop up or down, fix a time or an address, or mark a location as approximate.
 
-On a phone, the day's visits sit in a sheet over the map. Tap its handle to raise the list, and again to lower it. Held sideways, the phone shows them in a panel beside the map.
+On a phone, the day's visits sit in a sheet over the map. Tap its handle to raise the list, and again to lower it. Raised, the sheet also shows the trip's dates. Lowered, it leaves the map the screen and the legend appears. The map style is in the menu. Held sideways, the phone shows the day in a panel beside the map.
 
-<img src="docs/screenshots/sample-stops.png" width="320" alt="Mobile stop list for the sample day, showing card purchases, two ends of a taxi ride and an evening concert.">
+<img src="docs/screenshots/sample-stops.png" width="320" alt="The sample day on a phone. The route is on the map, and a sheet under it holds the date, the walking summary and the first stops.">
 
 ## It is your record
 

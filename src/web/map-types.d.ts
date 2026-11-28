@@ -39,6 +39,7 @@ interface JournalMap {
   closePopup(): void;
   removeLayer(layer: StreetMapLayer): void;
   off(events: object, context: object): void;
+  on(type: 'popupopen' | 'popupclose', callback: (event: { popup: MapPopup }) => void): void;
   on(type: 'click', callback: (event: {
     latlng: {
       lat: number;
@@ -49,6 +50,10 @@ interface JournalMap {
 interface LayerGroup {
   addTo(map: JournalMap): LayerGroup;
   clearLayers(): void;
+}
+interface MapPopup {
+  getElement(): HTMLElement;
+  update(): void;
 }
 interface PopupOptions {
   /** Pixels a popup keeps clear of the map's left and top edges when the map pans to show it. */

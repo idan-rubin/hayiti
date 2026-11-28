@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { strFromU8, unzipSync } from 'fflate';
 import { chromium, type Page } from 'playwright-core';
 import { readPortableRecord, waitForPortableTrip } from './portable-storage-helpers.ts';
-import { backUpTrip, restSheet } from './journal-controls.ts';
+import { backUpTrip, restSheet, toggleWholeTrip } from './journal-controls.ts';
 
 async function openSampleTrip(page: Page) {
   await page.getByRole('button', { name: 'Try the sample trip' }).click();
@@ -157,7 +157,7 @@ await test('an empty search, a missing payment account and a disconnected source
         buffer: Buffer.from(JSON.stringify({ format: 'hayiti/1', trip }))
       });
       await page.locator('#preview button').click();
-      await page.getByRole('button', { name: summary, exact: true }).click();
+      await page.getByRole('button', { name: 'Sources and import · ' + summary, exact: true }).click();
       await page.getByText(detail, { exact: false }).waitFor();
       await page.locator('#sources [data-close]').click();
     }
@@ -528,12 +528,14 @@ await test('a journal file makes an exact copy of the blank app and a route file
     const route = await offeredFile(page, '#downloadTrip');
     const saved = join(folder, route.name);
     await writeFile(saved, route.html);
-    const viewer = await browser.newPage(),
+    const viewer = await browser.newPage({ viewport: { width: 390, height: 664 } }),
       errors: string[] = [];
     viewer.on('pageerror', error => errors.push(error.message));
     await viewer.route('https://**/*', request => request.abort());
     await viewer.goto(pathToFileURL(saved).href);
     await viewer.locator('#title').filter({ hasText: 'A Thursday in Tel Aviv' }).waitFor();
+    assert.equal(await viewer.locator('body').getAttribute('data-sheet'), 'half');
+    await viewer.getByRole('status').filter({ hasText: 'Route copy · View only' }).waitFor();
     assert.equal(await viewer.locator('.leaflet-marker-icon').count(), 7);
     assert.deepEqual(errors, []);
   } finally {
@@ -975,7 +977,8 @@ await test('Google Pins belong to the selected day or the whole trip without joi
     assert.equal(await page.locator('#statStops').textContent(), '2 stops');
     assert.equal(await routePaths.count(), 1);
 
-    await scope.click();
+    await toggleWholeTrip(page);
+    assert.equal(await scope.getAttribute('aria-pressed'), 'true');
     assert.deepEqual(await names(), ['Bell tower · Google Pin', 'Hidden cove · Google Pin', 'Old quay · Google Pin']);
     assert.equal(await routePaths.count(), 2, 'two daily walks stay separate across the overnight gap');
     await page.locator('.google-pin[title="Hidden cove · Google Pin"]').click();
@@ -992,7 +995,7 @@ await test('Google Pins belong to the selected day or the whole trip without joi
     assert.equal(await routePaths.count(), 1);
 
     await page.reload();
-    await scope.waitFor();
+    await page.locator('#dayReel').waitFor();
     await page.locator('#tripDate').selectOption(firstDay);
     assert.deepEqual(await names(), ['Old quay · Google Pin']);
     assert.equal(await page.locator('#walkSummary').innerText(), firstWalk);
@@ -1073,7 +1076,7 @@ await test('the map controls leave pins and an opened popup uncovered, and a Goo
     }, selector);
 
     for (const view of ['day', 'whole trip']) {
-      if (view === 'whole trip') await page.locator('#wholeTrip').click();
+      if (view === 'whole trip') await toggleWholeTrip(page);
       await page.locator('.google-pin').first().waitFor();
       await page.waitForFunction(() => !document.querySelector('.leaflet-zoom-anim'));
       assert.equal(await covered('#map .pin, #map .google-pin'), 0, view + ' pins clear the controls');
@@ -1304,8 +1307,9 @@ await test('one daily details panel keeps unlocated visits, unconfirmed attendan
     await edit.locator('button.primary').click();
     await page.locator('#stops .stopname').filter({ hasText: 'Grocer' }).waitFor();
     assert.deepEqual(await page.locator('#stops .num').allTextContents(), ['1', '2']);
-    assert.equal(await page.locator('#count').innerText(), '2 stops');
-    await page.locator('#wholeTrip').click();
+    assert.equal(await page.locator('#statStops').isVisible(), true);
+    assert.equal(await page.locator('#statStops').textContent(), '2 stops');
+    await toggleWholeTrip(page);
     assert.equal(await page.locator('#other').isVisible(), false);
     assert.equal(await page.locator('#reviewDay').isVisible(), false);
   } finally {
